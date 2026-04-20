@@ -161,6 +161,23 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
   
   const [myItems, setMyItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(true);
+  const [editingItemId, setEditingItemId] = useState(null);
+
+  const handleEdit = (item) => {
+    setEditingItemId(item.id);
+    setTitle(item.title);
+    setCondition(item.condition);
+    setCategory(item.category);
+    setEstimatedValue(item.estimated_value || '');
+    setDescription(item.description || '');
+    setLookingFor(item.looking_for || '');
+    setImagePreview(item.image_url);
+    setImageFile(null); // Clear any pending new image
+    if (item.lat && item.lng) {
+      setLocation({ lat: item.lat, lng: item.lng });
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const fetchMyItems = async () => {
     setLoadingItems(true);
@@ -275,14 +292,33 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
       }
 
       const parsedEstimatedValue = estimatedValue ? estimatedValue.toString().replace(/[^0-9.]/g, '') : null;
-      const { error } = await supabase.from('items').insert([{
-        title, condition, category, estimated_value: parsedEstimatedValue, description, looking_for: lookingFor, user_id: user.id, image_url, lat: location?.lat || null, lng: location?.lng || null, status: 'active'
-      }]);
+      
+      const itemData = {
+        title, 
+        condition, 
+        category, 
+        estimated_value: parsedEstimatedValue, 
+        description, 
+        looking_for: lookingFor, 
+        user_id: user.id, 
+        image_url: image_url || imagePreview, 
+        lat: location?.lat || null, 
+        lng: location?.lng || null, 
+        status: 'active'
+      };
 
-      if (error) throw error;
+      if (editingItemId) {
+        const { error } = await supabase.from('items').update(itemData).eq('id', editingItemId);
+        if (error) throw error;
+        showToast('Item updated! ✨', 'success');
+        setEditingItemId(null);
+      } else {
+        const { error } = await supabase.from('items').insert([itemData]);
+        if (error) throw error;
+        showToast('Item successfully posted! 🎉', 'success');
+      }
 
-      showToast('Item successfully posted! 🎉', 'success');
-      setTitle(''); setCondition('Brand New'); setCategory('Electronics'); setEstimatedValue(''); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null);
+      setTitle(''); setCondition('Brand New'); setCategory('Electronics'); setEstimatedValue(''); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null); setEditingItemId(null);
       setPostSuccess(true);
       fetchMyItems();
       setTimeout(() => {
@@ -447,13 +483,27 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
               )}
             </label>
           </div>
-          <button 
-            type="submit" 
-            disabled={isSubmitting}
-            className={`w-full py-4 mt-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg rounded-xl shadow-[0_8px_20px_-6px_rgba(6,182,212,0.5)] active:scale-[0.98] transition-all ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-[0_12px_25px_-6px_rgba(6,182,212,0.6)]'}`}
-          >
-            {isSubmitting ? 'Posting...' : 'Post Item'}
-          </button>
+          <div className="flex gap-3 mt-2">
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className={`flex-1 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg rounded-xl shadow-[0_8px_20px_-6px_rgba(6,182,212,0.5)] active:scale-[0.98] transition-all ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-[0_12px_25px_-6px_rgba(6,182,212,0.6)]'}`}
+            >
+              {isSubmitting ? 'Processing...' : (editingItemId ? 'Update Item' : 'Post Item')}
+            </button>
+            {editingItemId && (
+              <button 
+                type="button"
+                onClick={() => {
+                  setEditingItemId(null);
+                  setTitle(''); setCondition('Brand New'); setCategory('Electronics'); setEstimatedValue(''); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null);
+                }}
+                className="px-6 py-4 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition-all"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
@@ -505,7 +555,7 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
                   </div>
                 </div>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
-                  <button onClick={() => showToast('Edit feature coming soon!', 'success')} className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-full transition-colors">
+                  <button onClick={() => handleEdit(item)} className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-full transition-colors">
                     <Edit2 size={15} />
                   </button>
                   <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors">
@@ -1120,12 +1170,16 @@ export default function App() {
   const [loadingItems, setLoadingItems] = useState(false);
   const [radius, setRadius] = useState(50);
   const [userLocation, setUserLocation] = useState(null);
+  const [locationName, setLocationName] = useState('');
+  const [locationQuery, setLocationQuery] = useState('');
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(true);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [toast, setToast] = useState(null);
+  const [viewingProfile, setViewingProfile] = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -1170,8 +1224,11 @@ export default function App() {
     // Request location silently on load
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.log("Location access denied or unavailable.")
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setLocationName('Your Location (GPS)');
+        },
+        (err) => console.log("Location access denied or unavailable. User can search manually.")
       );
     }
 
@@ -1219,10 +1276,30 @@ export default function App() {
     }
   }, [user, currentView, debouncedSearchQuery, activeCategory]);
 
+  const geocodeLocation = async (query) => {
+    if (!query.trim() || !window.google) return;
+    setIsGeocoding(true);
+    
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ address: query }, (results, status) => {
+      setIsGeocoding(false);
+      if (status === 'OK' && results[0]) {
+        const loc = results[0].geometry.location;
+        setUserLocation({ lat: loc.lat(), lng: loc.lng() });
+        setLocationName(results[0].formatted_address);
+        setLocationQuery('');
+        showToast(`Location set: ${results[0].formatted_address}`, 'success');
+      } else {
+        console.error("Geocode failed:", status);
+        const errorMsg = status === 'ZERO_RESULTS' 
+          ? 'Location not found. Try a city or postcode.' 
+          : `Geocoding error: ${status}`;
+        showToast(errorMsg, 'error');
+      }
+    });
+  };
+
   useEffect(() => {
-    // TEMPORARY DEBUG: Bypass coordinate math and radius filtering to show all top items
-    setCards(allItems);
-    /*
     if (userLocation && allItems.length > 0) {
       const filtered = allItems.map(item => {
         if (!item.lat || !item.lng) return { ...item, calculatedDistance: null };
@@ -1230,10 +1307,12 @@ export default function App() {
         return { ...item, calculatedDistance: dist };
       }).filter(item => item.calculatedDistance !== null && item.calculatedDistance <= radius);
       setCards(filtered);
+    } else if (!userLocation) {
+      // No location set — show all items unfiltered so the user isn't stuck
+      setCards(allItems);
     } else {
       setCards(allItems);
     }
-    */
   }, [allItems, radius, userLocation]);
 
   const handleSignOut = async () => {
@@ -1362,10 +1441,44 @@ export default function App() {
                     ))}
                   </div>
 
-                  {userLocation && (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex justify-between items-center text-sm font-bold text-gray-700">
-                        <span>Search Radius</span>
+                  {/* Location Section */}
+                  <div className="flex flex-col gap-2">
+                    {/* Manual Location Search */}
+                    <form onSubmit={(e) => { e.preventDefault(); geocodeLocation(locationQuery); }} className="flex gap-2">
+                      <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <MapPin size={16} className="text-gray-400" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder={locationName || 'Enter city, town or postcode...'}
+                          value={locationQuery}
+                          onChange={(e) => setLocationQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isGeocoding || !locationQuery.trim()}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${locationQuery.trim() ? 'bg-cyan-500 text-white hover:bg-cyan-600 shadow-md shadow-cyan-500/20' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                      >
+                        {isGeocoding ? '...' : 'Set'}
+                      </button>
+                    </form>
+
+                    {/* Location status badge */}
+                    {locationName && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-full">
+                          <CheckCircle2 size={12} /> {locationName.length > 35 ? locationName.slice(0, 35) + '...' : locationName}
+                        </span>
+                        <button onClick={() => { setUserLocation(null); setLocationName(''); }} className="text-gray-400 hover:text-rose-500 text-[10px] font-bold transition-colors">Clear</button>
+                      </div>
+                    )}
+
+                    {/* Radius slider — always visible */}
+                    <div className="flex justify-between items-center text-sm font-bold text-gray-700">
+                      <span>Search Radius</span>
                       <span className="text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full">{radius} km</span>
                     </div>
                     <input 
@@ -1373,14 +1486,11 @@ export default function App() {
                       min="5" max="100" step="5"
                       value={radius}
                       onChange={(e) => setRadius(Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500 mb-4"
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500 mb-2"
                     />
                     
-                    {loadError ? (
-                      <div className="w-full h-[250px] rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center p-4 text-center text-rose-600 font-bold shadow-sm">
-                        Failed to load Google Maps.<br/>Check the console for detailed error messages.
-                      </div>
-                    ) : isLoaded && (
+                    {/* Map — show when location is set */}
+                    {userLocation && !loadError && isLoaded && (
                       <div className="relative w-full rounded-2xl overflow-hidden shadow-[0_4px_20px_-5px_rgba(0,0,0,0.1)] border border-gray-100">
                         {cards.length === 0 && !debouncedSearchQuery && (
                           <div className="absolute top-4 left-0 right-0 flex justify-center z-[5] pointer-events-none">
@@ -1393,30 +1503,38 @@ export default function App() {
                           mapContainerStyle={mapContainerStyle}
                           center={userLocation}
                           zoom={Math.round(14 - Math.log2(radius))}
-                          options={{
-                            disableDefaultUI: true,
-                            zoomControl: true,
-                            gestureHandling: 'greedy'
-                          }}
-                          onLoad={(map) => console.log("Google Map successfully loaded:", map)}
+                          options={{ disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy' }}
                         >
                           <Marker position={userLocation} />
-                          <Circle 
-                            center={userLocation} 
-                            radius={radius * 1000} 
-                            options={{
-                              fillColor: '#06b6d4',
-                              fillOpacity: 0.15,
-                              strokeColor: '#06b6d4',
-                              strokeOpacity: 0.8,
-                              strokeWeight: 2,
-                            }}
-                          />
+                          <Circle center={userLocation} radius={radius * 1000} options={{ fillColor: '#06b6d4', fillOpacity: 0.15, strokeColor: '#06b6d4', strokeOpacity: 0.8, strokeWeight: 2 }} />
                         </GoogleMap>
                       </div>
                     )}
-                    </div>
-                  )}
+
+                    {/* No-location prompt */}
+                    {!userLocation && (
+                      <div className="w-full rounded-2xl bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100 p-6 flex flex-col items-center text-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center">
+                          <MapPin size={24} className="text-cyan-500" />
+                        </div>
+                        <p className="text-sm font-bold text-gray-700">Set your location to discover items nearby</p>
+                        <p className="text-xs text-gray-500">Type a city, town, or postcode above — or allow GPS access.</p>
+                        <button
+                          onClick={() => {
+                            if ('geolocation' in navigator) {
+                              navigator.geolocation.getCurrentPosition(
+                                (pos) => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationName('Your Location (GPS)'); },
+                                () => showToast('GPS denied. Use the search bar above.', 'error')
+                              );
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-cyan-500 text-white text-xs font-bold rounded-full hover:bg-cyan-600 transition-all shadow-md shadow-cyan-500/20"
+                        >
+                          Allow GPS Location
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="relative w-full aspect-[4/5] max-h-[650px] mb-8 mt-4 flex-1">
 
