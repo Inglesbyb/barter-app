@@ -25,7 +25,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-const Card = ({ item, active, removeCard }) => {
+const Card = ({ item, active, removeCard, setCurrentView, setMatchData }) => {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-15, 15]);
   const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0, 1, 1, 1, 0]);
@@ -39,6 +39,13 @@ const Card = ({ item, active, removeCard }) => {
       removeCard(item.id, 'right');
     } else if (info.offset.x < -100) {
       removeCard(item.id, 'left');
+    }
+  };
+
+  const handleInstantMatch = () => {
+    if (setMatchData && setCurrentView) {
+      setMatchData(item);
+      setCurrentView('chat');
     }
   };
 
@@ -124,17 +131,27 @@ const Card = ({ item, active, removeCard }) => {
             </div>
           )}
         </div>
+
+        {/* 🧪 DEV ONLY: Instant Match Cheat Code */}
+        <button
+          onClick={handleInstantMatch}
+          className="absolute bottom-3 right-3 text-[9px] font-black uppercase tracking-widest text-purple-500 bg-purple-50 border border-purple-200 px-2 py-1 rounded-full hover:bg-purple-100 transition-colors opacity-60 hover:opacity-100"
+        >
+          ⚡ Test Chat
+        </button>
       </div>
     </motion.div>
   );
 };
 
-const InventoryView = ({ user, showToast }) => {
+const InventoryView = ({ user, showToast, onSignOut }) => {
   const [title, setTitle] = useState('');
   const [condition, setCondition] = useState('Brand New');
   const [category, setCategory] = useState('Electronics');
-  const [estimatedValue, setEstimatedValue] = useState('£0');
+  const [estimatedValue, setEstimatedValue] = useState('');
   const [description, setDescription] = useState('');
+  const [postSuccess, setPostSuccess] = useState(false);
+  const myItemsRef = React.useRef(null);
   const [lookingFor, setLookingFor] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageFile, setImageFile] = useState(null);
@@ -264,9 +281,14 @@ const InventoryView = ({ user, showToast }) => {
 
       if (error) throw error;
 
-      showToast('Item successfully posted!', 'success');
-      setTitle(''); setCondition('Brand New'); setCategory('Electronics'); setEstimatedValue('£0'); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null);
+      showToast('Item successfully posted! 🎉', 'success');
+      setTitle(''); setCondition('Brand New'); setCategory('Electronics'); setEstimatedValue(''); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null);
+      setPostSuccess(true);
       fetchMyItems();
+      setTimeout(() => {
+        myItemsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setPostSuccess(false);
+      }, 400);
     } catch (error) {
       console.error("Item creation error:", error);
       showToast('Failed to add item: ' + (error?.message || 'Unknown error'), 'error');
@@ -346,13 +368,17 @@ const InventoryView = ({ user, showToast }) => {
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">Est. Value (Optional)</label>
-            <input 
-              type="text" 
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm pointer-events-none">£</span>
+              <input 
+              type="number" 
+              min="0"
               value={estimatedValue}
               onChange={(e) => setEstimatedValue(e.target.value)}
-              placeholder="e.g. £50" 
-              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium" 
+              placeholder="0" 
+              className="w-full pl-8 pr-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium" 
             />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">Description</label>
@@ -416,7 +442,7 @@ const InventoryView = ({ user, showToast }) => {
                     <Upload size={24} strokeWidth={2.5} />
                   </div>
                   <span className="text-sm font-bold text-cyan-700">Upload Photo</span>
-                  <span className="text-xs text-cyan-600/60 mt-1 font-medium">PNG, JPG up to 5MB</span>
+                  <span className="text-xs text-cyan-600/60 mt-1 font-medium">Any size — auto-optimised</span>
                 </>
               )}
             </label>
@@ -432,38 +458,69 @@ const InventoryView = ({ user, showToast }) => {
       </div>
 
       {/* My Items Section */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-        <h2 className="text-xl font-extrabold text-gray-900 mb-5">My Items</h2>
+      <div ref={myItemsRef} className={`bg-white p-6 rounded-3xl shadow-sm border transition-all duration-500 ${postSuccess ? 'border-cyan-300 shadow-cyan-100 shadow-lg' : 'border-gray-100'}`}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-extrabold text-gray-900">My Items</h2>
+          {postSuccess && <span className="text-xs font-bold text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full animate-pulse">✓ Just posted!</span>}
+        </div>
         {loadingItems ? (
-          <p className="text-gray-500 font-medium text-center py-4">Loading your inventory...</p>
-        ) : myItems.length === 0 ? (
-          <p className="text-gray-500 font-medium text-center py-4">You haven't posted any items yet.</p>
-        ) : (
           <div className="flex flex-col gap-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="flex gap-4 p-3 border border-gray-100 rounded-2xl items-center animate-pulse">
+                <div className="w-16 h-16 rounded-xl bg-gray-200 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  <div className="h-3 bg-gray-100 rounded w-1/2" />
+                  <div className="h-3 bg-gray-100 rounded w-1/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : myItems.length === 0 ? (
+          <motion.div
+            className="w-full flex flex-col items-center justify-center py-10 text-center gap-4" key="empty-state">
+            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+              <PackageOpen size={28} className="text-gray-300" />
+            </div>
+            <p className="text-gray-500 font-bold text-sm">No items yet</p>
+            <p className="text-gray-400 text-xs mt-1">Use the form above to post your first item!</p>
+          </motion.div>
+        ) : (
+          <div className="flex flex-col gap-3">
             {myItems.map(item => (
-              <div key={item.id} className="flex gap-4 p-3 border border-gray-100 rounded-2xl items-center hover:bg-gray-50 transition-colors group relative pr-12">
+              <div key={item.id} className="flex gap-4 p-3 border border-gray-100 rounded-2xl items-center hover:border-cyan-200 hover:bg-cyan-50/30 hover:shadow-sm transition-all duration-200 group relative pr-24">
                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
                   <img src={item.image_url || "https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=200&q=80"} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <h3 className="font-bold text-gray-900 text-sm truncate">{item.title}</h3>
-                  <p className="text-xs text-gray-500 font-medium">{item.condition}</p>
-                  <div className="text-[10px] text-cyan-700 font-bold mt-1 bg-cyan-100 w-max px-2 py-0.5 rounded-md">Active</div>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">{item.condition || 'No condition set'}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                      item.status === 'swapped' 
+                        ? 'bg-emerald-100 text-emerald-700' 
+                        : 'bg-cyan-100 text-cyan-700'
+                    }`}>{item.status === 'swapped' ? '✅ Swapped' : '🟢 Active'}</span>
+                    {item.category && <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded-full">{item.category}</span>}
+                  </div>
                 </div>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
                   <button onClick={() => showToast('Edit feature coming soon!', 'success')} className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-full transition-colors">
-                    <Edit2 size={16} />
+                    <Edit2 size={15} />
                   </button>
                   <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors">
-                    <Trash2 size={16} />
+                    <Trash2 size={15} />
                   </button>
                 </div>
               </div>
             ))}
           </div>
         )}
-        <div className="mt-8 pt-4 border-t border-gray-100 text-center">
+        <div className="mt-8 pt-4 border-t border-gray-100 flex items-center justify-between">
           <button onClick={() => alert("SwitchR is a matching platform only. All meetups are the sole responsibility of the users. Meet in public, tell a friend, and stay safe.")} className="text-xs font-bold text-gray-400 hover:text-cyan-600 transition-colors underline">View Safety Terms & Conditions</button>
+          <button onClick={onSignOut} className="text-xs font-bold text-rose-400 hover:text-rose-600 transition-colors flex items-center gap-1">
+            Sign Out
+          </button>
         </div>
       </div>
     </motion.div>
@@ -673,7 +730,29 @@ const MatchesView = ({ user, setCurrentView, setMatchData }) => {
     fetchMatches();
   }, [user]);
 
-  if (loading) return <div className="p-8 text-center text-gray-500 font-bold w-full h-full flex items-center justify-center">Loading matches...</div>;
+  if (loading) return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="w-full h-full bg-slate-50 flex flex-col p-6"
+    >
+      <div className="flex items-center gap-4 mb-6">
+        <div className="w-10 h-10 bg-gray-200 rounded-full animate-pulse" />
+        <div className="h-6 bg-gray-200 rounded w-32 animate-pulse" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {[1,2,3,4].map(i => (
+          <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 animate-pulse">
+            <div className="aspect-square w-full bg-gray-200" />
+            <div className="p-3 space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-3/4" />
+              <div className="h-3 bg-gray-100 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
 
   return (
     <motion.div 
@@ -875,13 +954,16 @@ const AuthView = () => {
         className="w-full max-w-md bg-white p-8 rounded-3xl shadow-2xl relative overflow-hidden"
       >
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-cyan-400 to-blue-600"></div>
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
-            <Zap size={20} className="text-white fill-white" />
+        <div className="flex flex-col items-center gap-2 justify-center mb-8">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
+              <Zap size={20} className="text-white fill-white" />
+            </div>
+            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600 tracking-tight">
+              Switch<span className="text-gray-900">R</span>
+            </h1>
           </div>
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600 tracking-tight">
-            Switch<span className="text-gray-900">R</span>
-          </h1>
+          <p className="text-gray-500 text-sm font-medium text-center">Swipe. Match. Trade. Barter locally, effortlessly.</p>
         </div>
 
         <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
@@ -947,6 +1029,81 @@ const AuthView = () => {
             {isLogin ? 'Sign Up' : 'Sign In'}
           </button>
         </p>
+      </motion.div>
+    </div>
+  );
+};
+
+const UserProfileModal = ({ profileId, onClose }) => {
+  const [profile, setProfile] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!profileId) return;
+    const load = async () => {
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+      const { data: i } = await supabase.from('items').select('*').eq('user_id', profileId).eq('status', 'active').order('created_at', { ascending: false }).limit(9);
+      setProfile(p);
+      setItems(i || []);
+      setLoading(false);
+    };
+    load();
+  }, [profileId]);
+
+  return (
+    <div className="absolute inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4 shrink-0" />
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center pb-10">
+            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : profile ? (
+          <div className="overflow-y-auto flex-1 pb-8">
+            {/* Profile Header */}
+            <div className="px-6 pb-5 flex items-center gap-4 border-b border-gray-100">
+              <img src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.id}`} className="w-16 h-16 rounded-full border-2 border-cyan-200 shadow-md" alt="avatar" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-extrabold text-gray-900">{profile.username || 'Anonymous'}</h2>
+                  {profile.accepted_terms && <BadgeCheck size={18} className="text-cyan-500" />}
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex items-center gap-1">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} size={13} className={s <= Math.round(profile.average_rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200 fill-gray-200'} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-500 font-medium">{profile.total_swaps || 0} swaps completed</span>
+                </div>
+              </div>
+            </div>
+            {/* Active Listings */}
+            <div className="px-6 pt-4">
+              <h3 className="text-sm font-extrabold text-gray-700 uppercase tracking-wider mb-3">Active Listings ({items.length})</h3>
+              {items.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-6">No active listings</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {items.map(item => (
+                    <div key={item.id} className="aspect-square rounded-xl overflow-hidden bg-gray-100 relative group">
+                      <img src={item.image_url || 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=200&q=80'} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1.5">
+                        <span className="text-white text-[10px] font-bold leading-tight truncate">{item.title}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : <p className="p-8 text-center text-gray-400">Profile not found</p>}
       </motion.div>
     </div>
   );
@@ -1146,8 +1303,8 @@ export default function App() {
     <div className="h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-neutral-900 to-black flex flex-col items-center font-sans overflow-hidden w-full relative">
       <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2000&auto=format&fit=crop')] opacity-[0.03] mix-blend-overlay bg-cover bg-center"></div>
       <div className="w-full max-w-md bg-slate-50 h-screen flex flex-col relative overflow-hidden shadow-2xl">
-        {/* Header */}
-        <header className="w-full px-6 py-5 flex items-center justify-between z-20 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 sticky top-0">
+        {/* Header - logo only */}
+        <header className="w-full px-6 py-4 flex items-center justify-between z-20 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 sticky top-0">
           <div 
             className="flex items-center gap-2 cursor-pointer group"
             onClick={() => setCurrentView('swipe')}
@@ -1159,25 +1316,15 @@ export default function App() {
               Switch<span className="text-gray-900">R</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4">
-            <button onClick={handleSignOut} className="text-xs font-bold text-gray-400 hover:text-cyan-600 transition-colors mr-2">Sign Out</button>
-            <button 
-              onClick={() => setCurrentView(currentView === 'matches' ? 'swipe' : 'matches')}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${currentView === 'matches' ? 'bg-cyan-100 text-cyan-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer'}`}
-            >
-              <MessageCircle size={20} />
-            </button>
-            <div 
-              onClick={() => setCurrentView(currentView === 'inventory' ? 'swipe' : 'inventory')}
-              className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border-2 shadow-md cursor-pointer hover:scale-105 transition-all ${currentView === 'inventory' ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-white bg-gray-100'}`}
-            >
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white shadow-md">
               <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`} alt="Profile" className="w-full h-full object-cover" />
             </div>
           </div>
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 w-full flex flex-col items-center p-4 relative min-h-0 overflow-y-auto h-[calc(100vh-80px)]">
+        <main className="flex-1 w-full flex flex-col items-center p-4 relative min-h-0 overflow-y-auto h-[calc(100vh-130px)]">
           <AnimatePresence mode="wait">
             {currentView === 'swipe' && (
               <motion.div 
@@ -1303,7 +1450,9 @@ export default function App() {
                           key={card.id} 
                           item={card} 
                           active={index === 0}
-                          removeCard={removeCard} 
+                          removeCard={removeCard}
+                          setCurrentView={setCurrentView}
+                          setMatchData={setMatchData}
                         />
                       )).reverse()}
                     </AnimatePresence>
@@ -1339,20 +1488,43 @@ export default function App() {
               </motion.div>
             )}
 
-            {currentView === 'inventory' && <InventoryView key="inventory" user={user} showToast={showToast} />}
+            {currentView === 'inventory' && <InventoryView key="inventory" user={user} showToast={showToast} onSignOut={handleSignOut} />}
             {currentView === 'matches' && <MatchesView key="matches" user={user} setCurrentView={setCurrentView} setMatchData={setMatchData} />}
             {currentView === 'chat' && <ChatView key="chat" user={user} matchData={matchData} setCurrentView={setCurrentView} showToast={showToast} />}
           </AnimatePresence>
         </main>
 
-        {/* Constrained Floating Action Button */}
-        {currentView === 'swipe' && (
-          <button 
-            onClick={() => setCurrentView('inventory')}
-            className="absolute bottom-8 right-6 w-14 h-14 bg-cyan-500 rounded-full flex items-center justify-center text-white shadow-[0_4px_20px_rgba(6,182,212,0.5)] hover:bg-cyan-600 transition-all z-[50] hover:scale-105 active:scale-95"
-          >
-            <span className="text-3xl leading-none -mt-1">+</span>
-          </button>
+        {/* Bottom Navigation Bar */}
+        {currentView !== 'chat' && (
+          <nav className="w-full bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 py-2 z-[60] shrink-0">
+            <button
+              onClick={() => setCurrentView('swipe')}
+              className={`flex flex-col items-center gap-1 px-5 py-2 rounded-2xl transition-all ${
+                currentView === 'swipe' ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <Zap size={22} className={currentView === 'swipe' ? 'fill-cyan-100' : ''} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Discover</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('inventory')}
+              className={`flex flex-col items-center gap-1 px-5 py-2 rounded-2xl transition-all ${
+                currentView === 'inventory' ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <PackageOpen size={22} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">My Items</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('matches')}
+              className={`flex flex-col items-center gap-1 px-5 py-2 rounded-2xl transition-all ${
+                currentView === 'matches' ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <MessageCircle size={22} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Matches</span>
+            </button>
+          </nav>
         )}
 
         {/* Toast Notification */}
