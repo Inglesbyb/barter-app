@@ -1462,10 +1462,11 @@ export default function App() {
 
         {(!['chat', 'info'].includes(currentView)) && (
           <nav 
-            className="bg-white border-t border-gray-100 flex items-center justify-around px-4 z-50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]"
+            className="bg-white border-t border-gray-100 flex items-start justify-around px-4 z-50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]"
             style={{ 
-              height: 'calc(80px + env(safe-area-inset-bottom, 20px))',
-              paddingBottom: 'env(safe-area-inset-bottom, 20px)' 
+              height: 'auto',
+              paddingTop: '16px',
+              paddingBottom: 'max(32px, env(safe-area-inset-bottom, 32px))' 
             }}
           >
             <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><Zap size={22} className={currentView === 'swipe' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Explore</span></button>

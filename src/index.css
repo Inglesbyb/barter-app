@@ -8,13 +8,13 @@
   --color-success: #10b981;
 }
 
-html, body {
+html, body, #root {
   overscroll-behavior: none;
   height: 100dvh;
   min-height: 100dvh;
   width: 100%;
   position: fixed;
-  overflow: hidden;
+  overflow: visible;
   margin: 0;
   padding: 0;
 }
