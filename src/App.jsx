@@ -25,122 +25,334 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-const Card = ({ item, active, removeCard, setCurrentView, setMatchData }) => {
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-15, 15]);
-  const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0, 1, 1, 1, 0]);
-  
-  // Indicators
-  const likeOpacity = useTransform(x, [0, 100], [0, 1]);
-  const nopeOpacity = useTransform(x, [-100, 0], [1, 0]);
+const ReelItem = ({ item, onSwap }) => {
+  return (
+    <div className="snap-start w-full h-full relative shrink-0 flex flex-col bg-black">
+      <div className="flex-1 relative w-full overflow-hidden">
+        <img 
+          src={item.image_url || "https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=800&q=80"} 
+          className="w-full h-full object-cover" 
+          alt={item.title} 
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30 pointer-events-none" />
+        
+        {/* Item Info Overlay */}
+        <div className="absolute bottom-8 left-4 right-16 text-white z-10 pointer-events-none">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="bg-cyan-500 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded shadow-sm">
+              {item.category || 'Item'}
+            </span>
+            <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-bold">
+              <MapPin size={10} />
+              {item.calculatedDistance?.toFixed(1) || 'Nearby'} km
+            </div>
+          </div>
+          <h2 className="text-2xl font-black mb-1 drop-shadow-lg tracking-tight leading-none">{item.title}</h2>
+          <p className="text-xs text-gray-300 line-clamp-2 font-medium drop-shadow-md mb-4">{item.description}</p>
+          
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md p-2 rounded-xl border border-white/10 w-fit">
+            <span className="text-[10px] text-cyan-400 font-black uppercase tracking-tighter">Looking For:</span>
+            <span className="text-[10px] font-bold text-white truncate max-w-[150px]">{item.looking_for || 'Open to offers'}</span>
+          </div>
+        </div>
 
-  const handleDragEnd = (event, info) => {
-    if (info.offset.x > 100) {
-      removeCard(item.id, 'right');
-    } else if (info.offset.x < -100) {
-      removeCard(item.id, 'left');
-    }
-  };
+        {/* Vertical Action Bar */}
+        <div className="absolute right-4 bottom-10 flex flex-col gap-6 items-center z-20">
+          <div className="w-12 h-12 rounded-full border-2 border-white overflow-hidden shadow-lg">
+            <img src={item.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user_id}`} alt="avatar" />
+          </div>
+          
+          <button onClick={() => onSwap(item)} className="w-14 h-14 rounded-full bg-cyan-500 flex items-center justify-center shadow-xl shadow-cyan-500/40 hover:scale-110 active:scale-95 transition-all text-white group">
+            <Zap size={28} className="fill-white animate-pulse" />
+          </button>
+          
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 text-white">
+              <Heart size={24} />
+            </div>
+            <span className="text-[10px] text-white font-bold">Save</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-  const handleInstantMatch = () => {
-    if (setMatchData && setCurrentView) {
-      setMatchData(item);
-      setCurrentView('chat');
+const BiddingDrawer = ({ user, targetItem, onClose, showToast }) => {
+  const [myItems, setMyItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMyItems = async () => {
+      const { data } = await supabase.from('items').select('*').eq('user_id', user.id).eq('status', 'active');
+      setMyItems(data || []);
+      setLoading(false);
+    };
+    fetchMyItems();
+  }, [user]);
+
+  const placeBid = async (offeredItem) => {
+    const { error } = await supabase.from('bids').insert([{
+      bidder_id: user.id,
+      receiver_id: targetItem.user_id,
+      item_offered_id: offeredItem.id,
+      item_wanted_id: targetItem.id,
+      status: 'pending'
+    }]);
+
+    if (error) {
+      showToast("Error placing bid.", "error");
+    } else {
+      showToast("Offer Sent! 🚀 Wait for them to accept.", "success");
+      onClose();
     }
   };
 
   return (
-    <motion.div
-      className="absolute top-0 w-full h-full rounded-3xl bg-white shadow-2xl overflow-hidden origin-bottom cursor-grab active:cursor-grabbing border border-gray-100/50"
-      style={{ x, rotate, opacity }}
-      drag={active ? "x" : false}
-      dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-      onDragEnd={handleDragEnd}
-      initial={{ scale: 0.95, y: 20, opacity: 0 }}
-      animate={{ scale: active ? 1 : 0.95, y: active ? 0 : 20, opacity: 1 }}
-      exit={{ x: x.get() > 0 ? 300 : -300, opacity: 0, transition: { duration: 0.2 } }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-    >
-      <div className="relative w-full h-[65%]">
-        <img 
-          src={item.image_url || "https://images.unsplash.com/photo-1555664424-778a1e5e1b48?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"} 
-          alt={item.title}
-          className="w-full h-full object-cover select-none pointer-events-none"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70" />
-        
-        {/* Seller Info Header */}
-        {item.profiles && (
-          <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
-            <div className="flex items-center gap-2 bg-black/30 backdrop-blur-md rounded-full pr-3 p-1">
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-white/50">
-                <img src={item.profiles.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.profiles.id}`} alt="Seller" className="w-full h-full object-cover" />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1">
-                  <span className="text-white text-xs font-bold leading-none">{item.profiles.username || 'Anonymous'}</span>
-                  {item.profiles.accepted_terms && <BadgeCheck size={12} className="text-cyan-400" />}
+    <div className="absolute inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
+      <motion.div 
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        className="w-full max-w-md bg-white rounded-t-[2.5rem] p-8 max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-8 shrink-0" />
+        <div className="mb-6">
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">Make an Offer</h2>
+          <p className="text-sm text-gray-500 font-medium mt-1">Select one of your items to trade for <span className="text-cyan-600 font-bold">{targetItem.title}</span></p>
+        </div>
+
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center py-20">
+            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="grid grid-cols-2 gap-4 pb-6">
+              {myItems.map(item => (
+                <div 
+                  key={item.id} 
+                  onClick={() => placeBid(item)} 
+                  className="group cursor-pointer bg-gray-50 border-2 border-transparent rounded-2xl overflow-hidden hover:border-cyan-500 hover:shadow-xl hover:shadow-cyan-500/10 transition-all duration-300"
+                >
+                  <div className="aspect-square relative overflow-hidden">
+                    <img src={item.image_url} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Zap size={24} className="text-white fill-white" />
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-sm font-bold text-gray-900 truncate leading-none">{item.title}</p>
+                    <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-wider">{item.category}</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Star size={10} className="text-yellow-400 fill-yellow-400" />
-                  <span className="text-white/80 text-[10px] font-medium leading-none">{item.profiles.average_rating || '0.0'} ({item.profiles.total_swaps || 0} swaps)</span>
-                </div>
+              ))}
+              <div 
+                onClick={() => onClose()}
+                className="aspect-square border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:text-cyan-500 hover:border-cyan-500 hover:bg-cyan-50 transition-all"
+              >
+                <Upload size={24} className="mb-2" />
+                <span className="text-xs font-bold">New Item</span>
               </div>
             </div>
           </div>
         )}
+        {myItems.length === 0 && !loading && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
+            <PackageOpen size={48} className="text-gray-200 mb-4" />
+            <p className="text-gray-500 font-bold">Nothing to offer!</p>
+            <p className="text-xs text-gray-400 mt-1 max-w-[200px]">You need to list an item in your inventory before you can bid.</p>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+};
 
-        {/* Like/Nope indicators on drag */}
-        <motion.div 
-          style={{ opacity: likeOpacity }} 
-          className="absolute top-8 left-8 border-[4px] border-emerald-400 rounded-lg px-4 py-2 text-emerald-400 font-extrabold text-4xl transform -rotate-12 uppercase tracking-wider bg-black/20 backdrop-blur-sm"
-        >
-          Want
-        </motion.div>
-        <motion.div 
-          style={{ opacity: nopeOpacity }} 
-          className="absolute top-8 right-8 border-[4px] border-rose-500 rounded-lg px-4 py-2 text-rose-500 font-extrabold text-4xl transform rotate-12 uppercase tracking-wider bg-black/20 backdrop-blur-sm"
-        >
-          Pass
-        </motion.div>
+const IncomingOffersView = ({ user, showToast, setCurrentView, setMatchData }) => {
+  const [offers, setOffers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchOffers = async () => {
+    const { data } = await supabase
+      .from('bids')
+      .select(`
+        *,
+        bidder:bidder_id(username, avatar_url),
+        item_offered:item_offered_id(*),
+        item_wanted:item_wanted_id(*)
+      `)
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    setOffers(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchOffers();
+  }, [user]);
+
+  const handleAccept = async (offer) => {
+    const { error } = await supabase.from('bids').update({ status: 'accepted' }).eq('id', offer.id);
+    if (!error) {
+      showToast("Offer Accepted! 🎉", "success");
+      setMatchData({ 
+        user_id: offer.bidder_id, 
+        title: offer.item_wanted.title,
+        profiles: offer.bidder
+      });
+      setCurrentView('chat');
+    }
+  };
+
+  const handleDecline = async (offerId) => {
+    await supabase.from('bids').update({ status: 'declined' }).eq('id', offerId);
+    showToast("Offer declined", "error");
+    fetchOffers();
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col bg-slate-50">
+      <div className="px-6 py-6 border-b bg-white sticky top-0 z-10">
+        <h2 className="text-2xl font-black text-gray-900 tracking-tight">Incoming Offers</h2>
+        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Pending approval</p>
       </div>
-
-      <div className="p-6 h-[35%] flex flex-col justify-between select-none bg-white relative">
-        <div className="absolute -top-12 left-6 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full flex items-center shadow-lg text-gray-800 text-sm font-semibold">
-          <MapPin size={16} className="mr-1 text-cyan-500" />
-          {item.calculatedDistance !== undefined && item.calculatedDistance !== null ? `${item.calculatedDistance.toFixed(1)} km away` : "Nearby"}
+      
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
         </div>
-        
-        <div className="mt-2 flex-1 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-2xl font-bold text-gray-900 leading-tight tracking-tight">{item.title}</h2>
-          </div>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {item.category && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-bold">{item.category}</span>}
-            {item.condition && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-bold">{item.condition}</span>}
-            {item.estimated_value && <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded text-xs font-bold">Est: {item.estimated_value}</span>}
-          </div>
-          <p className="text-gray-600 text-xs line-clamp-2 font-medium leading-relaxed mb-2">{item.description}</p>
-          {item.looking_for && (
-            <div className="mt-auto bg-cyan-50/50 border border-cyan-100 rounded-lg p-2.5 flex items-start shadow-sm">
-              <span className="text-cyan-500 mr-2 mt-0.5 text-base leading-none">🔍</span>
-              <p className="text-xs font-bold text-gray-700 leading-snug">
-                <span className="text-cyan-600 block mb-0.5 uppercase tracking-wide text-[10px]">Looking For</span> 
-                {item.looking_for}
-              </p>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
+          {offers.map(offer => (
+            <div key={offer.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full border border-gray-100 overflow-hidden shrink-0">
+                  <img src={offer.bidder.avatar_url} className="w-full h-full object-cover" alt="avatar" />
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 font-bold block leading-none mb-1">OFFER FROM</span>
+                  <span className="font-black text-gray-900">{offer.bidder.username}</span>
+                </div>
+              </div>
+
+              <div className="bg-cyan-50/50 rounded-2xl p-4 flex flex-col gap-2 border border-cyan-100">
+                <p className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">FOR YOUR ITEM</p>
+                <div className="flex items-center gap-3">
+                  <img src={offer.item_wanted.image_url} className="w-12 h-12 rounded-lg object-cover border border-cyan-100 shadow-sm" alt="wanted" />
+                  <p className="font-bold text-gray-800">{offer.item_wanted.title}</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-4 flex flex-col gap-2 border border-gray-100">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">OFFERING THEIR</p>
+                <div className="flex items-center gap-3">
+                  <img src={offer.item_offered.image_url} className="w-20 h-20 rounded-xl object-cover border border-white shadow-sm" alt="offered" />
+                  <div className="flex-1">
+                    <p className="font-black text-gray-900 text-lg leading-tight">{offer.item_offered.title}</p>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">{offer.item_offered.description}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <button 
+                  onClick={() => handleAccept(offer)} 
+                  className="flex-1 py-3.5 bg-gradient-to-tr from-cyan-500 to-blue-600 text-white rounded-2xl font-black shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                >
+                  Accept
+                </button>
+                <button 
+                  onClick={() => handleDecline(offer.id)}
+                  className="flex-1 py-3.5 bg-white text-gray-400 border border-gray-200 rounded-2xl font-black hover:bg-rose-50 hover:text-rose-500 hover:border-rose-100 active:scale-95 transition-all"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+          {offers.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50">
+              <Zap size={64} className="text-gray-200 mb-6" />
+              <p className="text-gray-900 font-black text-xl">No offers yet</p>
+              <p className="text-sm text-gray-500 mt-2 max-w-[200px]">Keep your items active in the reel to attract potential traders!</p>
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+};
 
-        {/* 🧪 DEV ONLY: Instant Match Cheat Code */}
-        <button
-          onClick={handleInstantMatch}
-          className="absolute bottom-3 right-3 text-[9px] font-black uppercase tracking-widest text-purple-500 bg-purple-50 border border-purple-200 px-2 py-1 rounded-full hover:bg-purple-100 transition-colors opacity-60 hover:opacity-100"
-        >
-          ⚡ Test Chat
-        </button>
-      </div>
-    </motion.div>
+const UserProfileModal = ({ profileId, onClose }) => {
+  const [profile, setProfile] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+      const { data: i } = await supabase.from('items').select('*').eq('user_id', profileId).eq('status', 'active');
+      setProfile(p);
+      setItems(i || []);
+      setLoading(false);
+    };
+    load();
+  }, [profileId]);
+
+  return (
+    <div className="absolute inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4 shrink-0" />
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center pb-10">
+            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : profile ? (
+          <div className="overflow-y-auto flex-1 pb-8">
+            <div className="px-6 pb-5 flex items-center gap-4 border-b border-gray-100">
+              <img src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.id}`} className="w-16 h-16 rounded-full border-2 border-cyan-200 shadow-md" alt="avatar" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-extrabold text-gray-900">{profile.username || 'Anonymous'}</h2>
+                  {profile.accepted_terms && <BadgeCheck size={18} className="text-cyan-500" />}
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex items-center gap-1">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} size={13} className={s <= Math.round(profile.average_rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200 fill-gray-200'} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-500 font-medium">{profile.total_swaps || 0} swaps completed</span>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 pt-4">
+              <h3 className="text-sm font-extrabold text-gray-700 uppercase tracking-wider mb-3">Active Listings ({items.length})</h3>
+              {items.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-6">No active listings</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {items.map(item => (
+                    <div key={item.id} className="aspect-square rounded-xl overflow-hidden bg-gray-100 relative group">
+                      <img src={item.image_url || 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=200&q=80'} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1.5">
+                        <span className="text-white text-[10px] font-bold leading-tight truncate">{item.title}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : <p className="p-8 text-center text-gray-400">Profile not found</p>}
+      </motion.div>
+    </div>
   );
 };
 
@@ -172,7 +384,7 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
     setDescription(item.description || '');
     setLookingFor(item.looking_for || '');
     setImagePreview(item.image_url);
-    setImageFile(null); // Clear any pending new image
+    setImageFile(null);
     if (item.lat && item.lng) {
       setLocation({ lat: item.lat, lng: item.lng });
     }
@@ -355,7 +567,6 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
       exit={{ opacity: 0, y: -20 }}
       className="w-full h-full flex flex-col gap-6 overflow-y-auto pb-8 pt-2 scrollbar-hide"
     >
-      {/* Add New Item Section */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
         <h2 className="text-xl font-extrabold text-gray-900 mb-5 flex items-center gap-2">
           <PackageOpen className="text-cyan-500" size={24} />
@@ -507,14 +718,13 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
         </form>
       </div>
 
-      {/* My Items Section */}
       <div ref={myItemsRef} className={`bg-white p-6 rounded-3xl shadow-sm border transition-all duration-500 ${postSuccess ? 'border-cyan-300 shadow-cyan-100 shadow-lg' : 'border-gray-100'}`}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-extrabold text-gray-900">My Items</h2>
           {postSuccess && <span className="text-xs font-bold text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full animate-pulse">✓ Just posted!</span>}
         </div>
         {loadingItems ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex-col gap-4 flex">
             {[1,2,3].map(i => (
               <div key={i} className="flex gap-4 p-3 border border-gray-100 rounded-2xl items-center animate-pulse">
                 <div className="w-16 h-16 rounded-xl bg-gray-200 shrink-0" />
@@ -665,19 +875,18 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
 
   return (
     <div className="w-full h-full flex flex-col bg-gray-50 absolute inset-0 z-50">
-      {/* Chat Header */}
       <div className="bg-white px-4 py-3 border-b border-gray-100 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={() => setCurrentView('matches')} className="p-2 text-gray-400 hover:text-cyan-600 rounded-full hover:bg-cyan-50 transition-colors">
+          <button onClick={() => setCurrentView('swipe')} className="p-2 text-gray-400 hover:text-cyan-600 rounded-full hover:bg-cyan-50 transition-colors">
             <ArrowLeft size={20} />
           </button>
           <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100">
-            <img src={matchData.image_url} alt="Item" className="w-full h-full object-cover" />
+            <img src={matchData.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${matchData.user_id}`} alt="User" className="w-full h-full object-cover" />
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 text-sm truncate max-w-[120px]">{matchData.title}</h3>
+            <h3 className="font-bold text-gray-900 text-sm truncate max-w-[120px]">{matchData.profiles?.username || 'Trader'}</h3>
             <p className="text-xs text-cyan-600 font-bold flex items-center gap-1">
-              <CheckCircle2 size={12} /> Matched
+              <CheckCircle2 size={12} /> Trading
             </p>
           </div>
         </div>
@@ -686,7 +895,6 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
         </button>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
@@ -701,7 +909,6 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
         )}
       </div>
 
-      {/* Input */}
       <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0">
         <input 
           type="text" 
@@ -718,442 +925,109 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
   );
 };
 
-
-const MatchesView = ({ user, setCurrentView, setMatchData }) => {
-  const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchMatches = async () => {
-      // Find items I liked
-      const { data: mySwipes } = await supabase
-        .from('swipes')
-        .select('item_id')
-        .eq('swiper_id', user.id)
-        .eq('direction', 'right');
-
-      if (!mySwipes || mySwipes.length === 0) {
-        setLoading(false);
-        return;
-      }
-      
-      const myLikedItemIds = mySwipes.map(s => s.item_id);
-
-      // Now find my items
-      const { data: myItems } = await supabase
-        .from('items')
-        .select('id')
-        .eq('user_id', user.id);
-
-      if (!myItems || myItems.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      const myItemIds = myItems.map(i => i.id);
-
-      // Check who swiped right on my items
-      const { data: theirSwipes } = await supabase
-        .from('swipes')
-        .select('swiper_id')
-        .in('item_id', myItemIds)
-        .eq('direction', 'right');
-
-      if (!theirSwipes || theirSwipes.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      const swiperIds = theirSwipes.map(s => s.swiper_id);
-
-      // The matched items are items in myLikedItemIds where the owner is in swiperIds
-      const { data: matchedItems } = await supabase
-        .from('items')
-        .select('*, profiles:user_id(id, username, avatar_url, average_rating, total_swaps, accepted_terms)')
-        .in('id', myLikedItemIds)
-        .in('user_id', swiperIds);
-
-      setMatches(matchedItems || []);
-      setLoading(false);
-    };
-
-    fetchMatches();
-  }, [user]);
-
-  if (loading) return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="w-full h-full bg-slate-50 flex flex-col p-6"
-    >
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-10 h-10 bg-gray-200 rounded-full animate-pulse" />
-        <div className="h-6 bg-gray-200 rounded w-32 animate-pulse" />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        {[1,2,3,4].map(i => (
-          <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 animate-pulse">
-            <div className="aspect-square w-full bg-gray-200" />
-            <div className="p-3 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-3/4" />
-              <div className="h-3 bg-gray-100 rounded w-1/2" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </motion.div>
-  );
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="w-full h-full bg-slate-50 flex flex-col p-6 overflow-y-auto"
-    >
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => setCurrentView('swipe')} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm text-gray-600 hover:bg-gray-50 transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h2 className="text-2xl font-black text-gray-900 tracking-tight">Your Matches</h2>
-      </div>
-
-      {matches.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center p-8 mt-10">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-            <Heart size={32} className="text-gray-300" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">No matches yet</h3>
-          <p className="text-gray-500 text-sm">Keep swiping right on items you like. When the owner likes your item too, it will appear here!</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4">
-          {matches.map(item => (
-            <div 
-              key={item.id} 
-              className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow group"
-              onClick={() => {
-                setMatchData(item);
-                setCurrentView('chat');
-              }}
-            >
-              <div className="aspect-square w-full relative overflow-hidden">
-                <img src={item.image_url || "https://images.unsplash.com/photo-1555664424-778a1e5e1b48?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80"} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                <div className="absolute bottom-2 left-2 right-2">
-                  <h3 className="text-white font-bold text-sm truncate">{item.title}</h3>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </motion.div>
-  );
-};
-
-const TermsModal = ({ onAccept }) => {
-  const [agreed, setAgreed] = useState(false);
-
-  return (
-    <div className="absolute inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
-      <motion.div 
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm flex flex-col"
-      >
-        <div className="w-16 h-16 bg-cyan-100 rounded-full flex items-center justify-center mb-4 mx-auto">
-          <Zap size={32} className="text-cyan-600" />
-        </div>
-        <h2 className="text-2xl font-black text-gray-900 text-center mb-2">Safety First!</h2>
-        <p className="text-gray-600 text-sm mb-6 text-center leading-relaxed">
-          SwitchR is a platform for finding bartering opportunities. By using this app, you acknowledge that all physical meetups and trades are conducted entirely at your own risk. Always meet in public places and prioritize your personal safety.
-        </p>
-
-        <label className="flex items-start gap-3 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer">
-          <input 
-            type="checkbox" 
-            checked={agreed} 
-            onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-1 w-5 h-5 rounded border-gray-300 text-cyan-500 focus:ring-cyan-500"
-          />
-          <span className="text-sm font-semibold text-gray-700 leading-snug">
-            I agree that all meetups are at my own risk and I will prioritize my safety.
-          </span>
-        </label>
-
-        <button 
-          onClick={onAccept}
-          disabled={!agreed}
-          className={`w-full py-4 rounded-full font-bold transition-all shadow-md active:scale-[0.98] ${agreed ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-cyan-500/30' : 'bg-gray-200 text-gray-400 shadow-none cursor-not-allowed'}`}
-        >
-          Enter SwitchR
-        </button>
-      </motion.div>
-    </div>
-  );
-};
-
-const MatchOverlay = ({ item, onSendMessage, onKeepSwiping }) => {
-  return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center"
-    >
-      <motion.div
-        initial={{ scale: 0.5, y: 50, opacity: 0 }}
-        animate={{ scale: 1, y: 0, opacity: 1 }}
-        transition={{ type: "spring", bounce: 0.5, duration: 0.8 }}
-        className="w-full max-w-sm"
-      >
-        <h2 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 italic tracking-tight drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
-          It's a Match!
-        </h2>
-        <p className="text-gray-300 font-medium mb-12 text-lg">You and the owner want to trade.</p>
-
-        <div className="flex items-center justify-center gap-0 mb-14 relative">
-          {/* My Item */}
-          <motion.div 
-            initial={{ x: -100, rotate: -20 }}
-            animate={{ x: 20, rotate: -10 }}
-            transition={{ type: "spring", delay: 0.2 }}
-            className="w-32 h-32 rounded-full overflow-hidden border-[6px] border-black shadow-[0_0_40px_rgba(6,182,212,0.6)] z-10 relative"
-          >
-            <div className="absolute inset-0 border-4 border-cyan-500 rounded-full z-20"></div>
-            <img src="https://images.unsplash.com/photo-1605901309584-818e25960b8f?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="My Item" className="w-full h-full object-cover" />
-          </motion.div>
-          {/* Matched Item */}
-          <motion.div 
-            initial={{ x: 100, rotate: 20 }}
-            animate={{ x: -20, rotate: 10 }}
-            transition={{ type: "spring", delay: 0.3 }}
-            className="w-32 h-32 rounded-full overflow-hidden border-[6px] border-black shadow-[0_0_40px_rgba(59,130,246,0.6)] z-20 relative"
-          >
-            <div className="absolute inset-0 border-4 border-blue-500 rounded-full z-20"></div>
-            <img src={item.image_url || "https://images.unsplash.com/photo-1555664424-778a1e5e1b48?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"} alt="Matched Item" className="w-full h-full object-cover" />
-          </motion.div>
-        </div>
-
-        <button 
-          onClick={onSendMessage}
-          className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg rounded-2xl shadow-[0_8px_30px_-6px_rgba(6,182,212,0.6)] hover:shadow-[0_12px_40px_-6px_rgba(6,182,212,0.8)] active:scale-[0.98] transition-all mb-4 flex items-center justify-center gap-3"
-        >
-          <MessageCircle size={22} fill="currentColor" className="fill-white/20" />
-          Send Message
-        </button>
-
-        <button 
-          onClick={onKeepSwiping}
-          className="w-full py-4 bg-transparent border-2 border-gray-700 text-gray-300 font-bold text-lg rounded-2xl hover:bg-white/5 hover:border-gray-500 active:scale-[0.98] transition-all"
-        >
-          Keep Swiping
-        </button>
-      </motion.div>
-    </motion.div>
-  );
-};
-
-
-
 const AuthView = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ text: '', type: '' });
+  const [error, setError] = useState('');
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage({ text: '', type: '' });
-
-    try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        
-        if (data.user) {
-          const { error: profileError } = await supabase.from('profiles').insert([
-            { id: data.user.id, username: username || email.split('@')[0] }
-          ]);
-          if (profileError) console.error("Profile creation error:", profileError);
-        }
-        
-        if (data.user && !data.session) {
-          setMessage({ text: 'Please check your email for a confirmation link!', type: 'success' });
-        }
-      }
-    } catch (err) {
-      setMessage({ text: err.message, type: 'error' });
-    } finally {
-      setLoading(false);
-    }
+    setError('');
+    const { error } = isLogin 
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password });
+    if (error) setError(error.message);
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center font-sans p-4 w-full">
+    <div className="min-h-screen w-full flex items-center justify-center bg-black p-6 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(6,182,212,0.15),transparent_70%)]" />
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white p-8 rounded-3xl shadow-2xl relative overflow-hidden"
+        className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-2xl relative z-10"
       >
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-cyan-400 to-blue-600"></div>
-        <div className="flex flex-col items-center gap-2 justify-center mb-8">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
-              <Zap size={20} className="text-white fill-white" />
-            </div>
-            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600 tracking-tight">
-              Switch<span className="text-gray-900">R</span>
-            </h1>
+        <div className="flex flex-col items-center mb-10">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-xl shadow-cyan-500/30 mb-6">
+            <Zap size={32} className="text-white fill-white" />
           </div>
-          <p className="text-gray-500 text-sm font-medium text-center">Swipe. Match. Trade. Barter locally, effortlessly.</p>
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight mb-2">Switch<span className="text-cyan-500">R</span></h1>
+          <p className="text-gray-500 font-medium text-center">The premier barter network for the modern age.</p>
         </div>
-
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          {isLogin ? 'Welcome back' : 'Create an account'}
-        </h2>
-
-        {message.text && (
-          <div className={`mb-6 p-4 rounded-xl text-sm font-bold text-center ${message.type === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
-            {message.text}
-          </div>
-        )}
-
-        <form onSubmit={handleAuth} className="flex flex-col gap-5">
-          {!isLogin && (
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Username</label>
-              <input 
-                type="text" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="CoolTrader99" 
-                className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium" 
-              />
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1.5">Email</label>
-            <input 
-              type="email" 
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com" 
-              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium" 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1.5">Password</label>
-            <input 
-              type="password" 
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••" 
-              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium" 
-            />
-          </div>
+        
+        <form onSubmit={handleAuth} className="flex flex-col gap-4">
+          <input 
+            type="email" 
+            placeholder="Email Address" 
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all font-medium"
+          />
+          <input 
+            type="password" 
+            placeholder="Password" 
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all font-medium"
+          />
+          {error && <p className="text-rose-500 text-xs font-bold text-center">{error}</p>}
           <button 
             type="submit" 
             disabled={loading}
-            className={`w-full py-4 mt-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg rounded-xl shadow-[0_8px_20px_-6px_rgba(6,182,212,0.5)] active:scale-[0.98] transition-all ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-[0_12px_25px_-6px_rgba(6,182,212,0.6)]'}`}
+            className="w-full py-5 bg-black text-white rounded-2xl font-black text-lg hover:bg-gray-800 transition-all active:scale-[0.98] mt-2 shadow-xl"
           >
-            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Sign Up')}
+            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Join SwitchR')}
           </button>
         </form>
-
-        <p className="mt-6 text-center text-sm text-gray-600 font-medium">
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <button 
-            onClick={() => { setIsLogin(!isLogin); setMessage({ text: '', type: '' }); }}
-            className="text-cyan-600 font-bold hover:underline focus:outline-none"
-          >
-            {isLogin ? 'Sign Up' : 'Sign In'}
-          </button>
-        </p>
+        
+        <button 
+          onClick={() => setIsLogin(!isLogin)}
+          className="w-full mt-8 text-sm font-bold text-gray-400 hover:text-cyan-600 transition-colors uppercase tracking-widest"
+        >
+          {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
+        </button>
       </motion.div>
     </div>
   );
 };
 
-const UserProfileModal = ({ profileId, onClose }) => {
-  const [profile, setProfile] = useState(null);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!profileId) return;
-    const load = async () => {
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', profileId).single();
-      const { data: i } = await supabase.from('items').select('*').eq('user_id', profileId).eq('status', 'active').order('created_at', { ascending: false }).limit(9);
-      setProfile(p);
-      setItems(i || []);
-      setLoading(false);
-    };
-    load();
-  }, [profileId]);
-
+const TermsModal = ({ onAccept }) => {
   return (
-    <div className="absolute inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <motion.div
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
+    <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-[3rem] p-10 max-w-lg w-full shadow-2xl relative overflow-hidden"
       >
-        <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4 shrink-0" />
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center pb-10">
-            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : profile ? (
-          <div className="overflow-y-auto flex-1 pb-8">
-            {/* Profile Header */}
-            <div className="px-6 pb-5 flex items-center gap-4 border-b border-gray-100">
-              <img src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.id}`} className="w-16 h-16 rounded-full border-2 border-cyan-200 shadow-md" alt="avatar" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-extrabold text-gray-900">{profile.username || 'Anonymous'}</h2>
-                  {profile.accepted_terms && <BadgeCheck size={18} className="text-cyan-500" />}
-                </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <div className="flex items-center gap-1">
-                    {[1,2,3,4,5].map(s => (
-                      <Star key={s} size={13} className={s <= Math.round(profile.average_rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200 fill-gray-200'} />
-                    ))}
-                  </div>
-                  <span className="text-xs text-gray-500 font-medium">{profile.total_swaps || 0} swaps completed</span>
-                </div>
-              </div>
-            </div>
-            {/* Active Listings */}
-            <div className="px-6 pt-4">
-              <h3 className="text-sm font-extrabold text-gray-700 uppercase tracking-wider mb-3">Active Listings ({items.length})</h3>
-              {items.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-6">No active listings</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {items.map(item => (
-                    <div key={item.id} className="aspect-square rounded-xl overflow-hidden bg-gray-100 relative group">
-                      <img src={item.image_url || 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=200&q=80'} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1.5">
-                        <span className="text-white text-[10px] font-bold leading-tight truncate">{item.title}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : <p className="p-8 text-center text-gray-400">Profile not found</p>}
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-cyan-400 to-blue-600" />
+        <h2 className="text-3xl font-black text-gray-900 mb-6 tracking-tight">Safety First! 🛡️</h2>
+        <div className="space-y-4 text-gray-600 font-medium mb-10">
+          <p>SwitchR is a matching platform only. To ensure your safety while bartering:</p>
+          <ul className="space-y-3">
+            <li className="flex items-start gap-3">
+              <div className="mt-1 w-5 h-5 rounded-full bg-cyan-100 flex items-center justify-center shrink-0"><span className="text-[10px] text-cyan-600 font-black">1</span></div>
+              <span>Always meet in a <b>well-lit public place</b> (coffee shops, police station lobbies).</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <div className="mt-1 w-5 h-5 rounded-full bg-cyan-100 flex items-center justify-center shrink-0"><span className="text-[10px] text-cyan-600 font-black">2</span></div>
+              <span><b>Tell a friend</b> where you're going and share your location.</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <div className="mt-1 w-5 h-5 rounded-full bg-cyan-100 flex items-center justify-center shrink-0"><span className="text-[10px] text-cyan-600 font-black">3</span></div>
+              <span><b>Never</b> share personal financial details or home address.</span>
+            </li>
+          </ul>
+        </div>
+        <button 
+          onClick={onAccept}
+          className="w-full py-5 bg-cyan-500 text-white rounded-2xl font-black text-lg hover:bg-cyan-600 shadow-xl shadow-cyan-500/20 active:scale-[0.98] transition-all"
+        >
+          I Understand & Agree
+        </button>
       </motion.div>
     </div>
   );
@@ -1163,8 +1037,9 @@ export default function App() {
   const [cards, setCards] = useState([]);
   const [allItems, setAllItems] = useState([]);
   const [lastAction, setLastAction] = useState(null);
-  const [currentView, setCurrentView] = useState('swipe'); // 'swipe' | 'inventory' | 'match' | 'chat'
+  const [currentView, setCurrentView] = useState('swipe'); // 'swipe' | 'inventory' | 'chat' | 'offers'
   const [matchData, setMatchData] = useState(null);
+  const [biddingOnItem, setBiddingOnItem] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -1193,12 +1068,6 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (loadError) {
-      console.error("Google Maps API Load Error:", loadError);
-    }
-  }, [loadError]);
-
-  useEffect(() => {
     const checkTerms = async (userId) => {
       const { data } = await supabase.from('profiles').select('accepted_terms').eq('id', userId).single();
       if (data && !data.accepted_terms) {
@@ -1221,14 +1090,13 @@ export default function App() {
       if (session?.user) checkTerms(session.user.id);
     });
 
-    // Request location silently on load
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           setLocationName('Your Location (GPS)');
         },
-        (err) => console.log("Location access denied or unavailable. User can search manually.")
+        (err) => console.log("Location access denied")
       );
     }
 
@@ -1246,40 +1114,27 @@ export default function App() {
     if (!user) return;
     const fetchItems = async () => {
       setLoadingItems(true);
-      
       let query = supabase
         .from('items')
         .select('*, profiles:user_id(id, username, avatar_url, average_rating, total_swaps, accepted_terms)')
         .or('status.eq.active,status.is.null')
+        .neq('user_id', user.id)
         .limit(100);
 
-      if (activeCategory !== 'All') {
-        query = query.eq('category', activeCategory);
-      }
-
-      if (debouncedSearchQuery) {
-        query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
-      }
+      if (activeCategory !== 'All') query = query.eq('category', activeCategory);
+      if (debouncedSearchQuery) query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
 
       const { data, error } = await query;
-      
-      if (error) {
-        console.error("Error fetching feed items:", error);
-      } else {
-        setAllItems(data || []);
-      }
+      if (!error) setAllItems(data || []);
       setLoadingItems(false);
     };
     
-    if (currentView === 'swipe') {
-      fetchItems();
-    }
+    if (currentView === 'swipe') fetchItems();
   }, [user, currentView, debouncedSearchQuery, activeCategory]);
 
   const geocodeLocation = async (query) => {
     if (!query.trim() || !window.google) return;
     setIsGeocoding(true);
-    
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ address: query }, (results, status) => {
       setIsGeocoding(false);
@@ -1290,11 +1145,7 @@ export default function App() {
         setLocationQuery('');
         showToast(`Location set: ${results[0].formatted_address}`, 'success');
       } else {
-        console.error("Geocode failed:", status);
-        const errorMsg = status === 'ZERO_RESULTS' 
-          ? 'Location not found. Try a city or postcode.' 
-          : `Geocoding error: ${status}`;
-        showToast(errorMsg, 'error');
+        showToast('Location not found.', 'error');
       }
     });
   };
@@ -1307,93 +1158,23 @@ export default function App() {
         return { ...item, calculatedDistance: dist };
       }).filter(item => item.calculatedDistance !== null && item.calculatedDistance <= radius);
       setCards(filtered);
-    } else if (!userLocation) {
-      // No location set — show all items unfiltered so the user isn't stuck
-      setCards(allItems);
     } else {
       setCards(allItems);
     }
   }, [allItems, radius, userLocation]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
-
-  const removeCard = async (id, direction) => {
-    const cardMatched = cards.find(c => c.id === id);
-    setLastAction({ card: cardMatched, direction });
-    setCards((prev) => prev.filter((card) => card.id !== id));
-    
-    // Record swipe in Supabase
-    try {
-      if (user) {
-        await supabase.from('swipes').insert([{
-          swiper_id: user.id,
-          item_id: id,
-          direction: direction
-        }]);
-
-        if (direction === 'right' && cardMatched) {
-          // Real Match Logic: Did this item's owner swipe right on any of MY items?
-          const { data: matchCheck, error } = await supabase
-            .from('swipes')
-            .select(`
-              id,
-              items!inner(user_id)
-            `)
-            .eq('swiper_id', cardMatched.user_id)
-            .eq('direction', 'right')
-            .eq('items.user_id', user.id);
-
-          if (!error && matchCheck && matchCheck.length > 0) {
-            // It's a real match!
-            setMatchData(cardMatched);
-            showToast("It's a Match! 🎉", 'success');
-            setCurrentView('match');
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error recording swipe:', err);
-    }
-  };
-
-  const handleButtonClick = (direction) => {
-    if (cards.length === 0) return;
-    const currentCard = cards[0];
-    removeCard(currentCard.id, direction);
-  };
-
-  const undo = () => {
-    if (!lastAction || !lastAction.card) return;
-    setCards(prev => [lastAction.card, ...prev]);
-    setLastAction(null);
-  };
-
-  if (authLoading) {
-    return <div className="min-h-screen bg-neutral-900 flex items-center justify-center"><div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div></div>;
-  }
-
-  if (!user) {
-    return <AuthView />;
-  }
+  if (authLoading) return <div className="min-h-screen bg-neutral-900 flex items-center justify-center"><div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (!user) return <AuthView />;
 
   return (
-    <div className="h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-neutral-900 to-black flex flex-col items-center font-sans overflow-hidden w-full relative">
-      <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2000&auto=format&fit=crop')] opacity-[0.03] mix-blend-overlay bg-cover bg-center"></div>
-      <div className="w-full max-w-md bg-slate-50 h-screen flex flex-col relative overflow-hidden shadow-2xl">
-        {/* Header - logo only */}
-        <header className="w-full px-6 py-4 flex items-center justify-between z-20 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 sticky top-0">
-          <div 
-            className="flex items-center gap-2 cursor-pointer group"
-            onClick={() => setCurrentView('swipe')}
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30 group-hover:scale-105 transition-transform">
+    <div className="h-screen bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
+      <div className="w-full max-w-md bg-white h-screen flex flex-col relative overflow-hidden shadow-2xl">
+        <header className="w-full px-6 py-4 flex items-center justify-between z-20 bg-white shadow-sm border-b border-gray-100 sticky top-0">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('swipe')}>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
               <Zap size={16} className="text-white fill-white" />
             </div>
-            <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600 tracking-tight">
-              Switch<span className="text-gray-900">R</span>
-            </h1>
+            <h1 className="text-2xl font-black text-gray-900">Switch<span className="text-cyan-500">R</span></h1>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white shadow-md">
@@ -1402,289 +1183,55 @@ export default function App() {
           </div>
         </header>
 
-        {/* Main Content Area */}
-        <main className="flex-1 w-full flex flex-col items-center p-4 relative min-h-0 overflow-y-auto h-[calc(100vh-130px)]">
+        <main className="flex-1 w-full flex flex-col items-center relative min-h-0 overflow-hidden">
           <AnimatePresence mode="wait">
             {currentView === 'swipe' && (
-              <motion.div 
-                key="swipe"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="w-full h-full flex flex-col"
-              >
-                <div className="w-full px-2 mb-4 z-10 flex flex-col gap-3">
-                  {/* Search Bar */}
-                  <div className="relative w-full">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search size={18} className="text-gray-400" />
+              <motion.div key="swipe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col">
+                <div className="flex-1 w-full bg-black relative snap-y snap-mandatory overflow-y-scroll scrollbar-hide">
+                  {cards.length > 0 ? cards.map(item => <ReelItem key={item.id} item={item} onSwap={setBiddingOnItem} />) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white p-10 text-center">
+                      <Zap size={64} className="text-cyan-500 mb-6 animate-pulse" />
+                      <h2 className="text-2xl font-black mb-2">No items nearby</h2>
+                      <p className="text-sm text-gray-400">Expand your radius or search manually.</p>
+                      <button onClick={() => setRadius(100)} className="mt-6 px-8 py-3 bg-white text-black rounded-full font-black text-sm">Expand Radius</button>
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Search for items (e.g. Nintendo Switch)..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium text-gray-700 placeholder:text-gray-400"
-                    />
-                  </div>
-
-                  {/* Filter Chips */}
-                  <div className="flex w-full gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x">
-                    {['All', 'Electronics', 'Fashion', 'Home', 'Hobbies', 'Other'].map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => setActiveCategory(cat)}
-                        className={`snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${activeCategory === cat ? 'bg-cyan-500 text-white border-cyan-500 shadow-md shadow-cyan-500/20' : 'bg-white text-gray-600 border-gray-200 hover:border-cyan-300'}`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Location Section */}
-                  <div className="flex flex-col gap-2">
-                    {/* Manual Location Search */}
-                    <form onSubmit={(e) => { e.preventDefault(); geocodeLocation(locationQuery); }} className="flex gap-2">
-                      <div className="relative flex-1">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <MapPin size={16} className="text-gray-400" />
-                        </div>
-                        <input
-                          type="text"
-                          placeholder={locationName || 'Enter city, town or postcode...'}
-                          value={locationQuery}
-                          onChange={(e) => setLocationQuery(e.target.value)}
-                          className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={isGeocoding || !locationQuery.trim()}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${locationQuery.trim() ? 'bg-cyan-500 text-white hover:bg-cyan-600 shadow-md shadow-cyan-500/20' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                      >
-                        {isGeocoding ? '...' : 'Set'}
-                      </button>
-                    </form>
-
-                    {/* Location status badge */}
-                    {locationName && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-full">
-                          <CheckCircle2 size={12} /> {locationName.length > 35 ? locationName.slice(0, 35) + '...' : locationName}
-                        </span>
-                        <button onClick={() => { setUserLocation(null); setLocationName(''); }} className="text-gray-400 hover:text-rose-500 text-[10px] font-bold transition-colors">Clear</button>
-                      </div>
-                    )}
-
-                    {/* Radius slider — always visible */}
-                    <div className="flex justify-between items-center text-sm font-bold text-gray-700">
-                      <span>Search Radius</span>
-                      <span className="text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full">{radius} km</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="5" max="100" step="5"
-                      value={radius}
-                      onChange={(e) => setRadius(Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500 mb-2"
-                    />
-                    
-                    {/* Map — show when location is set */}
-                    {userLocation && !loadError && isLoaded && (
-                      <div className="relative w-full rounded-2xl overflow-hidden shadow-[0_4px_20px_-5px_rgba(0,0,0,0.1)] border border-gray-100">
-                        {cards.length === 0 && !debouncedSearchQuery && (
-                          <div className="absolute top-4 left-0 right-0 flex justify-center z-[5] pointer-events-none">
-                            <div className="bg-white px-5 py-2.5 rounded-full font-bold text-sm text-cyan-600 shadow-xl border border-cyan-100 flex items-center gap-2">
-                              <MapPin size={16} /> Be the first to post in this area!
-                            </div>
-                          </div>
-                        )}
-                        <GoogleMap
-                          mapContainerStyle={mapContainerStyle}
-                          center={userLocation}
-                          zoom={Math.round(14 - Math.log2(radius))}
-                          options={{ disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy' }}
-                        >
-                          <Marker position={userLocation} />
-                          <Circle center={userLocation} radius={radius * 1000} options={{ fillColor: '#06b6d4', fillOpacity: 0.15, strokeColor: '#06b6d4', strokeOpacity: 0.8, strokeWeight: 2 }} />
-                        </GoogleMap>
-                      </div>
-                    )}
-
-                    {/* No-location prompt */}
-                    {!userLocation && (
-                      <div className="w-full rounded-2xl bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100 p-6 flex flex-col items-center text-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center">
-                          <MapPin size={24} className="text-cyan-500" />
-                        </div>
-                        <p className="text-sm font-bold text-gray-700">Set your location to discover items nearby</p>
-                        <p className="text-xs text-gray-500">Type a city, town, or postcode above — or allow GPS access.</p>
-                        <button
-                          onClick={() => {
-                            if ('geolocation' in navigator) {
-                              navigator.geolocation.getCurrentPosition(
-                                (pos) => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationName('Your Location (GPS)'); },
-                                () => showToast('GPS denied. Use the search bar above.', 'error')
-                              );
-                            }
-                          }}
-                          className="px-5 py-2.5 bg-cyan-500 text-white text-xs font-bold rounded-full hover:bg-cyan-600 transition-all shadow-md shadow-cyan-500/20"
-                        >
-                          Allow GPS Location
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="relative w-full aspect-[4/5] max-h-[650px] mb-8 mt-4 flex-1">
-
-                  
-                  {cards.length === 0 ? (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-white rounded-3xl shadow-xl border border-gray-100"
-                    >
-                      <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 shadow-inner relative">
-                        <div className="absolute inset-0 border-4 border-dashed border-gray-200 rounded-full animate-[spin_10s_linear_infinite]"></div>
-                        {debouncedSearchQuery ? <Search size={40} className="text-gray-300" /> : <Zap size={40} className="text-gray-300 fill-gray-200" />}
-                      </div>
-                      <h2 className="text-2xl font-bold text-gray-800 mb-3">
-                        {debouncedSearchQuery ? "No items found" : "No more items!"}
-                      </h2>
-                      <p className="text-gray-500 mb-8 font-medium">
-                        {debouncedSearchQuery ? `We couldn't find anything matching "${debouncedSearchQuery}". Try a different keyword or expand your radius.` : "Check back later for new bartering opportunities in your area."}
-                      </p>
-                      <button 
-                        className="px-8 py-3.5 bg-gray-900 text-white rounded-full font-bold shadow-[0_8px_20px_-6px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_25px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 transition-all active:scale-95 active:translate-y-0"
-                      >
-                        Reload Items
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <AnimatePresence>
-                      {cards.map((card, index) => (
-                        <Card 
-                          key={card.id} 
-                          item={card} 
-                          active={index === 0}
-                          removeCard={removeCard}
-                          setCurrentView={setCurrentView}
-                          setMatchData={setMatchData}
-                        />
-                      )).reverse()}
-                    </AnimatePresence>
                   )}
                 </div>
-
-                {/* Action Buttons */}
-                {cards.length > 0 && (
-                  <div className="flex items-center justify-center gap-6 w-full max-w-xs mx-auto z-10 mb-8 pb-4">
-                    <button
-                      onClick={undo}
-                      disabled={!lastAction}
-                      className={`w-14 h-14 rounded-full flex items-center justify-center bg-white shadow-xl transition-all active:scale-90 ${!lastAction ? 'opacity-50 cursor-not-allowed shadow-none' : 'hover:bg-yellow-50 hover:shadow-yellow-500/20 shadow-[0_10px_20px_-5px_rgba(0,0,0,0.1)]'}`}
-                    >
-                      <Undo2 size={24} className="text-yellow-500" strokeWidth={2.5} />
-                    </button>
-                    
-                    <button
-                      onClick={() => handleButtonClick('left')}
-                      className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-[0_10px_20px_-5px_rgba(244,63,94,0.3)] hover:bg-rose-50 hover:shadow-[0_15px_25px_-5px_rgba(244,63,94,0.4)] hover:-translate-y-1 transition-all active:scale-90 active:translate-y-0 text-rose-500 group"
-                    >
-                      <X size={36} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
-                    </button>
-
-                    <button
-                      onClick={() => handleButtonClick('right')}
-                      className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-[0_10px_20px_-5px_rgba(16,185,129,0.3)] hover:bg-emerald-50 hover:shadow-[0_15px_25px_-5px_rgba(16,185,129,0.4)] hover:-translate-y-1 transition-all active:scale-90 active:translate-y-0 text-emerald-500 group"
-                    >
-                      <Heart size={36} strokeWidth={3} className="group-hover:scale-110 transition-transform fill-transparent group-hover:fill-emerald-100" />
-                    </button>
-                  </div>
-                )}
+                <div className="absolute top-4 left-4 right-4 z-50 flex gap-2 overflow-x-auto scrollbar-hide pointer-events-auto">
+                  {['All', 'Electronics', 'Fashion', 'Home', 'Hobbies'].map(cat => (
+                    <button key={cat} onClick={() => setActiveCategory(cat)} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${activeCategory === cat ? 'bg-cyan-500 text-white border-cyan-500 shadow-lg' : 'bg-black/40 text-white/70 border-white/10 backdrop-blur-md'}`}>{cat}</button>
+                  ))}
+                </div>
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-black/50 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10 shadow-2xl">
+                   <MapPin size={12} className="text-cyan-400" />
+                   <span className="text-[10px] font-black text-white uppercase tracking-widest">{radius}km</span>
+                   <input type="range" min="5" max="100" step="5" value={radius} onChange={(e) => setRadius(Number(e.target.value))} className="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                </div>
               </motion.div>
             )}
-
+            {currentView === 'offers' && <motion.div key="offers" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full h-full flex flex-col"><IncomingOffersView user={user} showToast={showToast} setCurrentView={setCurrentView} setMatchData={setMatchData} /></motion.div>}
             {currentView === 'inventory' && <InventoryView key="inventory" user={user} showToast={showToast} onSignOut={handleSignOut} />}
-            {currentView === 'matches' && <MatchesView key="matches" user={user} setCurrentView={setCurrentView} setMatchData={setMatchData} />}
             {currentView === 'chat' && <ChatView key="chat" user={user} matchData={matchData} setCurrentView={setCurrentView} showToast={showToast} />}
           </AnimatePresence>
         </main>
 
-        {/* Bottom Navigation Bar */}
         {currentView !== 'chat' && (
-          <nav className="w-full bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 py-2 z-[60] shrink-0">
-            <button
-              onClick={() => setCurrentView('swipe')}
-              className={`flex flex-col items-center gap-1 px-5 py-2 rounded-2xl transition-all ${
-                currentView === 'swipe' ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <Zap size={22} className={currentView === 'swipe' ? 'fill-cyan-100' : ''} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Discover</span>
-            </button>
-            <button
-              onClick={() => setCurrentView('inventory')}
-              className={`flex flex-col items-center gap-1 px-5 py-2 rounded-2xl transition-all ${
-                currentView === 'inventory' ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <PackageOpen size={22} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">My Items</span>
-            </button>
-            <button
-              onClick={() => setCurrentView('matches')}
-              className={`flex flex-col items-center gap-1 px-5 py-2 rounded-2xl transition-all ${
-                currentView === 'matches' ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <MessageCircle size={22} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Matches</span>
-            </button>
+          <nav className="h-20 bg-white border-t border-gray-100 flex items-center justify-around px-2 z-30 shrink-0">
+            <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-16 h-16 rounded-2xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600' : 'text-gray-400 hover:bg-gray-50'}`}><Zap size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">Explore</span></button>
+            <button onClick={() => setCurrentView('offers')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-16 h-16 rounded-2xl ${currentView === 'offers' ? 'bg-cyan-50 text-cyan-600' : 'text-gray-400 hover:bg-gray-50'}`}><MessageCircle size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">Offers</span></button>
+            <button onClick={() => setCurrentView('inventory')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-16 h-16 rounded-2xl ${currentView === 'inventory' ? 'bg-cyan-50 text-cyan-600' : 'text-gray-400 hover:bg-gray-50'}`}><PackageOpen size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">My Items</span></button>
           </nav>
         )}
 
-        {/* Toast Notification */}
         <AnimatePresence>
+          {biddingOnItem && <BiddingDrawer user={user} targetItem={biddingOnItem} onClose={() => setBiddingOnItem(null)} showToast={showToast} />}
+          {viewingProfile && <UserProfileModal profileId={viewingProfile} onClose={() => setViewingProfile(null)} />}
           {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: -50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] w-full max-w-sm px-4 pointer-events-none"
-            >
-              <div className={`p-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold text-sm ${toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-gray-900 text-white'}`}>
-                {toast.type === 'success' ? <Zap size={18} className="text-cyan-400" /> : <X size={18} />}
-                {toast.message}
-              </div>
+            <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] w-full max-w-sm px-4 pointer-events-none">
+              <div className={`p-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold text-sm ${toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-gray-900 text-white'}`}>{toast.message}</div>
             </motion.div>
           )}
-        </AnimatePresence>
-
-        {/* Overlays */}
-        <AnimatePresence>
-          {showTermsModal && (
-            <TermsModal 
-              key="terms" 
-              onAccept={async () => {
-                await supabase.from('profiles').update({ accepted_terms: true }).eq('id', user.id);
-                setHasAcceptedTerms(true);
-                setShowTermsModal(false);
-              }} 
-            />
-          )}
-          {currentView === 'match' && matchData && (
-            <MatchOverlay 
-              key="matchOverlay"
-              item={matchData} 
-              onSendMessage={() => setCurrentView('chat')} 
-              onKeepSwiping={() => {
-                setCurrentView('swipe');
-                setMatchData(null);
-              }} 
-            />
-          )}
+          {showTermsModal && <TermsModal onAccept={async () => { await supabase.from('profiles').update({ accepted_terms: true }).eq('id', user.id); setShowTermsModal(false); }} />}
         </AnimatePresence>
       </div>
     </div>
