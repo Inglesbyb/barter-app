@@ -1402,7 +1402,7 @@ export default function App() {
           </AnimatePresence>
         </header>
 
-        <main className="flex-1 w-full flex flex-col items-center relative min-h-0 overflow-hidden bg-slate-50/50">
+        <main className="flex-1 w-full flex flex-col items-center relative min-h-0 bg-slate-50/50">
           <AnimatePresence mode="wait">
             {currentView === 'swipe' && (
               <motion.div key="swipe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col relative">

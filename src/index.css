@@ -8,15 +8,22 @@
   --color-success: #10b981;
 }
 
-html, body, #root {
+html, body {
   overscroll-behavior: none;
   height: 100dvh;
   min-height: 100dvh;
   width: 100%;
-  position: fixed;
-  overflow: visible;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: visible;
 }
 
 body {
@@ -26,10 +33,11 @@ body {
 
 /* Smooth "Rubber-band" Scroll for Mobile */
 .scroll-container {
-  overflow-y: auto;
+  overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none;  /* IE and Edge */
+  height: 100%;
 }
 
 .scroll-container::-webkit-scrollbar {
