@@ -904,6 +904,7 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
         </div>
       </div>
     </motion.div>
+    </div>
   );
 };
 
@@ -1298,7 +1299,6 @@ export default function App() {
   if (authLoading) return <div className="min-h-screen bg-neutral-900 flex items-center justify-center"><div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div></div>;
   if (!user) return <AuthView />;
 
-  return (
   return (
     <div className="min-h-[100dvh] bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
       <div className="w-full max-w-md bg-white min-h-[100dvh] flex flex-col relative overflow-hidden shadow-2xl">
