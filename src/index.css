@@ -8,15 +8,20 @@
   --color-success: #10b981;
 }
 
+html, body {
+  overscroll-behavior: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  width: 100%;
+  position: fixed;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: #f9fafb;
-  margin: 0;
-  padding: 0;
-  overflow: hidden; 
-  height: 100dvh;
-  width: 100%;
-  position: fixed;
 }
 
 /* Smooth "Rubber-band" Scroll for Mobile */

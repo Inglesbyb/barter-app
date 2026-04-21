@@ -1299,8 +1299,9 @@ export default function App() {
   if (!user) return <AuthView />;
 
   return (
-    <div className="h-[100dvh] bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
-      <div className="w-full max-w-md bg-white h-[100dvh] flex flex-col relative overflow-hidden shadow-2xl">
+  return (
+    <div className="min-h-[100dvh] bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
+      <div className="w-full max-w-md bg-white min-h-[100dvh] flex flex-col relative overflow-hidden shadow-2xl">
         <header className="w-full px-6 py-4 flex flex-col z-40 bg-white shadow-sm border-b border-gray-100 sticky top-0 transition-all duration-500">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('swipe')}>
@@ -1460,7 +1461,13 @@ export default function App() {
         </main>
 
         {(!['chat', 'info'].includes(currentView)) && (
-          <nav className="h-24 bg-white border-t border-gray-100 flex items-center justify-around px-4 z-30 shrink-0 pb-4 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+          <nav 
+            className="bg-white border-t border-gray-100 flex items-center justify-around px-4 z-50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]"
+            style={{ 
+              height: 'calc(80px + env(safe-area-inset-bottom, 20px))',
+              paddingBottom: 'env(safe-area-inset-bottom, 20px)' 
+            }}
+          >
             <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><Zap size={22} className={currentView === 'swipe' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Explore</span></button>
             <button onClick={() => setCurrentView('offers')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'offers' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><MessageCircle size={22} className={currentView === 'offers' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Offers</span></button>
             <button onClick={() => setCurrentView('inventory')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'inventory' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><PackageOpen size={22} className={currentView === 'inventory' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">My Items</span></button>
