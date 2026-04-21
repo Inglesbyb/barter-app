@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion';
-import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2 } from 'lucide-react';
+import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2, ChevronDown, Settings, HelpCircle, LogOut, ChevronRight, Shield, Users, User } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import { supabase } from './supabase';
 
@@ -25,56 +25,75 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-const ReelItem = ({ item, onSwap }) => {
-  return (
-    <div className="snap-start w-full h-full relative shrink-0 flex flex-col bg-black">
-      <div className="flex-1 relative w-full overflow-hidden">
-        <img 
-          src={item.image_url || "https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=800&q=80"} 
-          className="w-full h-full object-cover" 
-          alt={item.title} 
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30 pointer-events-none" />
-        
-        {/* Item Info Overlay */}
-        <div className="absolute bottom-8 left-4 right-16 text-white z-10 pointer-events-none">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="bg-cyan-500 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded shadow-sm">
-              {item.category || 'Item'}
-            </span>
-            <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-bold">
-              <MapPin size={10} />
-              {item.calculatedDistance?.toFixed(1) || 'Nearby'} km
-            </div>
-          </div>
-          <h2 className="text-2xl font-black mb-1 drop-shadow-lg tracking-tight leading-none">{item.title}</h2>
-          <p className="text-xs text-gray-300 line-clamp-2 font-medium drop-shadow-md mb-4">{item.description}</p>
-          
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md p-2 rounded-xl border border-white/10 w-fit">
-            <span className="text-[10px] text-cyan-400 font-black uppercase tracking-tighter">Looking For:</span>
-            <span className="text-[10px] font-bold text-white truncate max-w-[150px]">{item.looking_for || 'Open to offers'}</span>
-          </div>
-        </div>
+const Card = ({ item, active, removeCard, onSwap }) => {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 200], [-25, 25]);
+  const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0, 1, 1, 1, 0]);
+  const heartScale = useTransform(x, [0, 150], [0, 1.2]);
+  const xIconScale = useTransform(x, [0, -150], [0, 1.2]);
 
-        {/* Vertical Action Bar */}
-        <div className="absolute right-4 bottom-10 flex flex-col gap-6 items-center z-20">
-          <div className="w-12 h-12 rounded-full border-2 border-white overflow-hidden shadow-lg">
-            <img src={item.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user_id}`} alt="avatar" />
+  const handleDragEnd = (event, info) => {
+    if (info.offset.x > 120) {
+      removeCard(item.id, 'right');
+      onSwap(item);
+    } else if (info.offset.x < -120) {
+      removeCard(item.id, 'left');
+    }
+  };
+
+  return (
+    <motion.div
+      style={{ x, rotate, opacity, zIndex: active ? 10 : 0 }}
+      drag={active ? "x" : false}
+      dragConstraints={{ left: 0, right: 0 }}
+      onDragEnd={handleDragEnd}
+      initial={{ scale: 0.9, opacity: 0, y: 10 }}
+      animate={{ scale: 1, opacity: 1, y: 0 }}
+      exit={{ 
+        x: x.get() === 0 ? 0 : (x.get() < 0 ? -600 : 600), 
+        opacity: 0, 
+        scale: 0.5, 
+        rotate: x.get() < 0 ? -45 : 45,
+        transition: { duration: 0.4, ease: "easeOut" } 
+      }}
+      className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing touch-none px-4 py-6"
+    >
+      <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 bg-white">
+        <img src={item.image_url} className="w-full h-full object-cover select-none pointer-events-none" alt={item.title} />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent pointer-events-none" />
+        
+        {/* Indicators */}
+        <motion.div style={{ scale: heartScale }} className="absolute top-10 right-10 z-20 bg-cyan-500 p-4 rounded-full text-white shadow-xl pointer-events-none">
+           <Zap size={40} className="fill-white" />
+        </motion.div>
+        <motion.div style={{ scale: xIconScale }} className="absolute top-10 left-10 z-20 bg-rose-500 p-4 rounded-full text-white shadow-xl pointer-events-none">
+           <X size={40} strokeWidth={3} />
+        </motion.div>
+
+        <div className="absolute bottom-10 left-8 right-8 text-white z-10 pointer-events-none">
+          <div className="flex items-center gap-2 mb-3">
+             <span className="bg-cyan-500 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg">
+                {item.category}
+             </span>
+             <span className="bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/20">
+                {item.condition}
+             </span>
           </div>
+          <h2 className="text-3xl font-black mb-1 tracking-tight leading-none drop-shadow-2xl">{item.title}</h2>
+          <p className="text-xs text-gray-300 font-medium line-clamp-2 mb-6 opacity-90">{item.description}</p>
           
-          <button onClick={() => onSwap(item)} className="w-14 h-14 rounded-full bg-cyan-500 flex items-center justify-center shadow-xl shadow-cyan-500/40 hover:scale-110 active:scale-95 transition-all text-white group">
-            <Zap size={28} className="fill-white animate-pulse" />
-          </button>
-          
-          <div className="flex flex-col items-center gap-1">
-            <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 text-white">
-              <Heart size={24} />
-            </div>
-            <span className="text-[10px] text-white font-bold">Save</span>
+          <div className="flex items-center justify-between mt-auto">
+             <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
+                <MapPin size={14} className="text-cyan-400" />
+                <span className="text-sm font-bold">{item.calculatedDistance?.toFixed(1) || '?'} km</span>
+             </div>
+             <div className="w-12 h-12 rounded-full border-2 border-white overflow-hidden shadow-xl">
+                <img src={item.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.user_id}`} alt="avatar" />
+             </div>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -284,74 +303,167 @@ const IncomingOffersView = ({ user, showToast, setCurrentView, setMatchData }) =
   );
 };
 
-const UserProfileModal = ({ profileId, onClose }) => {
+const ProfileView = ({ user, onSignOut, setCurrentView }) => {
   const [profile, setProfile] = useState(null);
-  const [items, setItems] = useState([]);
+  const [itemCount, setItemCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', profileId).single();
-      const { data: i } = await supabase.from('items').select('*').eq('user_id', profileId).eq('status', 'active');
-      setProfile(p);
-      setItems(i || []);
+    const fetchProfile = async () => {
+      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      const { count } = await supabase.from('items').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
+      
+      setProfile(profileData);
+      setItemCount(count || 0);
       setLoading(false);
     };
-    load();
-  }, [profileId]);
+    fetchProfile();
+  }, [user]);
+
+  if (loading) return <div className="flex-1 flex items-center justify-center bg-slate-50"><div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
-    <div className="absolute inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <motion.div
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4 shrink-0" />
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center pb-10">
-            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+    <div className="w-full h-full flex flex-col bg-slate-50 overflow-y-auto pb-24">
+      <div className="bg-white px-8 pt-12 pb-10 rounded-b-[3.5rem] shadow-sm border-b border-gray-100 relative">
+        <button onClick={() => setCurrentView('info')} className="absolute top-6 right-6 p-2 text-gray-400 hover:text-cyan-500 transition-colors">
+          <Settings size={22} />
+        </button>
+        <div className="flex flex-col items-center">
+          <div className="w-32 h-32 rounded-full border-[6px] border-gray-50 shadow-2xl overflow-hidden mb-5 relative group transition-transform hover:scale-105 duration-500">
+            <img src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              <Edit2 size={24} className="text-white" />
+            </div>
           </div>
-        ) : profile ? (
-          <div className="overflow-y-auto flex-1 pb-8">
-            <div className="px-6 pb-5 flex items-center gap-4 border-b border-gray-100">
-              <img src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.id}`} className="w-16 h-16 rounded-full border-2 border-cyan-200 shadow-md" alt="avatar" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-extrabold text-gray-900">{profile.username || 'Anonymous'}</h2>
-                  {profile.accepted_terms && <BadgeCheck size={18} className="text-cyan-500" />}
-                </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <div className="flex items-center gap-1">
-                    {[1,2,3,4,5].map(s => (
-                      <Star key={s} size={13} className={s <= Math.round(profile.average_rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200 fill-gray-200'} />
-                    ))}
-                  </div>
-                  <span className="text-xs text-gray-500 font-medium">{profile.total_swaps || 0} swaps completed</span>
-                </div>
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight leading-none">
+            {profile?.username || (user?.email?.split('@')[0]) || 'New User'}
+          </h2>
+          <div className="flex items-center gap-2 mt-2">
+            {!profile?.username && (
+              <span className="bg-amber-500 text-[10px] font-black text-white uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-amber-500/20">Setup Profile</span>
+            )}
+            <div className="flex items-center gap-1 bg-yellow-400/10 text-yellow-600 px-2 py-0.5 rounded-full text-[10px] font-black">
+              <Star size={10} className="fill-yellow-600" />
+              {profile?.rating?.toFixed(1) || '5.0'}
+            </div>
+          </div>
+          
+          <div className="flex gap-10 mt-10">
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-black text-gray-900 tracking-tighter">{profile?.trades_completed || '0'}</span>
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-1">Swaps</span>
+            </div>
+            <div className="w-px h-10 bg-gray-100 mt-2" />
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-black text-gray-900 tracking-tighter">{itemCount}</span>
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-1">Items</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-6 mt-10">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-4 ml-2">Trader Bio</h3>
+        <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm relative">
+           <div className="absolute top-0 right-10 w-4 h-4 bg-white rotate-45 -translate-y-2 border-l border-t border-gray-100" />
+          <p className="text-gray-600 font-medium leading-relaxed italic">
+            "{profile?.bio || "No bio yet. Tell the community what you're looking to swap!"}"
+          </p>
+        </div>
+      </div>
+
+      <div className="px-6 mt-10 space-y-4">
+        <button onClick={() => setCurrentView('info')} className="w-full flex items-center justify-between p-6 bg-white rounded-3xl border border-gray-100 shadow-sm hover:border-cyan-200 hover:shadow-md transition-all group">
+          <div className="flex items-center gap-5">
+             <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <HelpCircle size={24} />
+             </div>
+             <div className="text-left">
+                <span className="font-black text-gray-900 block leading-none">Information Hub</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1 block">Help & Guidelines</span>
+             </div>
+          </div>
+          <ChevronRight size={20} className="text-gray-300 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all" />
+        </button>
+        <button onClick={onSignOut} className="w-full flex items-center justify-between p-6 bg-white rounded-3xl border border-gray-100 shadow-sm hover:border-rose-200 hover:shadow-md transition-all group">
+          <div className="flex items-center gap-5">
+             <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <LogOut size={24} />
+             </div>
+             <div className="text-left">
+                <span className="font-black text-gray-900 block leading-none">Logout</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1 block">Exit Securely</span>
+             </div>
+          </div>
+          <ChevronRight size={20} className="text-gray-300 group-hover:text-rose-500 group-hover:translate-x-1 transition-all" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const InfoView = ({ onBack }) => {
+  const [expanded, setExpanded] = useState('swap');
+
+  const sections = [
+    {
+      id: 'swap',
+      title: 'How to Swap',
+      icon: <Zap size={20} />,
+      content: '1. Browse items in the Explore feed.\n2. Swipe right to make an offer.\n3. Select one of your items to bid.\n4. If they accept, the chat unlocks!'
+    },
+    {
+      id: 'safety',
+      title: 'Safety Tips',
+      icon: <Shield size={20} />,
+      content: '• Meet in public, well-lit places.\n• Bring a friend if possible.\n• Inspect items thoroughly before trading.\n• Never share personal financial details.'
+    },
+    {
+      id: 'guidelines',
+      title: 'Community Guidelines',
+      icon: <Users size={20} />,
+      content: '• Be respectful and honest.\n• No illegal or prohibited items.\n• Honor your accepted trades.\n• Keep communication within the app.'
+    }
+  ];
+
+  return (
+    <div className="w-full h-full flex flex-col bg-slate-50 overflow-y-auto pb-20">
+      <div className="px-6 py-8 flex items-center gap-4 bg-white border-b border-gray-100 sticky top-0 z-10">
+        <button onClick={onBack} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
+          <ArrowLeft size={24} />
+        </button>
+        <h2 className="text-2xl font-black text-gray-900 tracking-tight">Information Hub</h2>
+      </div>
+
+      <div className="p-6 space-y-5">
+        {sections.map(s => (
+          <div key={s.id} className="border border-gray-100 rounded-[2.5rem] overflow-hidden bg-white shadow-sm transition-all hover:shadow-md">
+            <button 
+              onClick={() => setExpanded(expanded === s.id ? '' : s.id)}
+              className="w-full flex items-center justify-between p-7 bg-white"
+            >
+              <div className="flex items-center gap-5">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 text-cyan-500 flex items-center justify-center">{s.icon}</div>
+                <span className="font-black text-gray-900 tracking-tight text-lg">{s.title}</span>
               </div>
-            </div>
-            <div className="px-6 pt-4">
-              <h3 className="text-sm font-extrabold text-gray-700 uppercase tracking-wider mb-3">Active Listings ({items.length})</h3>
-              {items.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-6">No active listings</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {items.map(item => (
-                    <div key={item.id} className="aspect-square rounded-xl overflow-hidden bg-gray-100 relative group">
-                      <img src={item.image_url || 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&w=200&q=80'} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-1.5">
-                        <span className="text-white text-[10px] font-bold leading-tight truncate">{item.title}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <ChevronDown size={22} className={`text-gray-300 transition-transform duration-500 ${expanded === s.id ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence>
+              {expanded === s.id && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <div className="p-8 pt-0 text-sm text-gray-600 font-medium leading-relaxed whitespace-pre-line border-t border-gray-50 bg-slate-50/50">
+                    {s.content}
+                  </div>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
           </div>
-        ) : <p className="p-8 text-center text-gray-400">Profile not found</p>}
-      </motion.div>
+        ))}
+      </div>
+      
+      <div className="p-6 text-center">
+        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">SwitchR v1.0.4</p>
+      </div>
     </div>
   );
 };
@@ -738,12 +850,23 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
           </div>
         ) : myItems.length === 0 ? (
           <motion.div
-            className="w-full flex flex-col items-center justify-center py-10 text-center gap-4" key="empty-state">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-              <PackageOpen size={28} className="text-gray-300" />
+            className="w-full flex flex-col items-center justify-center py-16 text-center gap-6" key="empty-state">
+            <div className="w-24 h-24 rounded-full bg-cyan-50 flex items-center justify-center relative">
+              <PackageOpen size={40} className="text-cyan-500" />
+              <div className="absolute inset-0 rounded-full border-2 border-dashed border-cyan-200 animate-spin-slow" />
             </div>
-            <p className="text-gray-500 font-bold text-sm">No items yet</p>
-            <p className="text-gray-400 text-xs mt-1">Use the form above to post your first item!</p>
+            <div>
+              <p className="text-xl font-black text-gray-900">Your inventory is empty</p>
+              <p className="text-sm text-gray-400 mt-2 max-w-[240px] mx-auto font-medium">You need to list an item before you can start trading with others!</p>
+            </div>
+            <button 
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+            >
+              Post Your First Item
+            </button>
           </motion.div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -1055,6 +1178,12 @@ export default function App() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [viewingProfile, setViewingProfile] = useState(null);
+  const [isLocationPickerExpanded, setIsLocationPickerExpanded] = useState(false);
+
+  const removeCard = (id, direction) => {
+    setCards(prev => prev.filter(card => card.id !== id));
+    setLastAction({ id, direction });
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -1163,63 +1292,182 @@ export default function App() {
     }
   }, [allItems, radius, userLocation]);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setCurrentView('swipe');
+  };
+
   if (authLoading) return <div className="min-h-screen bg-neutral-900 flex items-center justify-center"><div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div></div>;
   if (!user) return <AuthView />;
 
   return (
     <div className="h-screen bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
       <div className="w-full max-w-md bg-white h-screen flex flex-col relative overflow-hidden shadow-2xl">
-        <header className="w-full px-6 py-4 flex items-center justify-between z-20 bg-white shadow-sm border-b border-gray-100 sticky top-0">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('swipe')}>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
-              <Zap size={16} className="text-white fill-white" />
+        <header className="w-full px-6 py-4 flex flex-col z-40 bg-white shadow-sm border-b border-gray-100 sticky top-0 transition-all duration-500">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('swipe')}>
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
+                <Zap size={16} className="text-white fill-white" />
+              </div>
+              <h1 className="text-2xl font-black text-gray-900 tracking-tight">Switch<span className="text-cyan-500">R</span></h1>
             </div>
-            <h1 className="text-2xl font-black text-gray-900">Switch<span className="text-cyan-500">R</span></h1>
+            
+            <button 
+              onClick={() => setIsLocationPickerExpanded(!isLocationPickerExpanded)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all border ${isLocationPickerExpanded ? 'bg-cyan-50 border-cyan-200 text-cyan-600 shadow-sm' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
+            >
+              <MapPin size={14} className={isLocationPickerExpanded ? 'text-cyan-500' : 'text-gray-400'} />
+              <span className="text-[10px] font-black uppercase tracking-widest truncate max-w-[100px]">
+                {locationName ? locationName.split(',')[0] : 'Set Location'}
+              </span>
+              <ChevronDown size={14} className={`transition-transform duration-300 ${isLocationPickerExpanded ? 'rotate-180' : ''}`} />
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white shadow-md">
-              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`} alt="Profile" className="w-full h-full object-cover" />
-            </div>
-          </div>
-        </header>
 
-        <main className="flex-1 w-full flex flex-col items-center relative min-h-0 overflow-hidden">
-          <AnimatePresence mode="wait">
-            {currentView === 'swipe' && (
-              <motion.div key="swipe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col">
-                <div className="flex-1 w-full bg-black relative snap-y snap-mandatory overflow-y-scroll scrollbar-hide">
-                  {cards.length > 0 ? cards.map(item => <ReelItem key={item.id} item={item} onSwap={setBiddingOnItem} />) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-white p-10 text-center">
-                      <Zap size={64} className="text-cyan-500 mb-6 animate-pulse" />
-                      <h2 className="text-2xl font-black mb-2">No items nearby</h2>
-                      <p className="text-sm text-gray-400">Expand your radius or search manually.</p>
-                      <button onClick={() => setRadius(100)} className="mt-6 px-8 py-3 bg-white text-black rounded-full font-black text-sm">Expand Radius</button>
+          <AnimatePresence>
+            {isLocationPickerExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="pt-6 pb-2 space-y-4">
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={locationQuery}
+                      onChange={e => setLocationQuery(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && geocodeLocation(locationQuery)}
+                      placeholder="Search city or zip code..." 
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    />
+                    <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  </div>
+
+                  {isLoaded && userLocation && (
+                    <div className="rounded-[2rem] overflow-hidden border border-gray-100 shadow-inner bg-gray-50">
+                      <GoogleMap
+                        mapContainerStyle={{ width: '100%', height: '180px' }}
+                        center={userLocation}
+                        zoom={12}
+                        options={{ 
+                          disableDefaultUI: true,
+                          styles: [
+                            { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+                            { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] }
+                          ]
+                        }}
+                      >
+                        <Marker position={userLocation} />
+                        <Circle 
+                          center={userLocation} 
+                          radius={radius * 1000} 
+                          options={{ 
+                            fillColor: '#06b6d4', 
+                            fillOpacity: 0.05, 
+                            strokeColor: '#06b6d4', 
+                            strokeWeight: 1 
+                          }} 
+                        />
+                      </GoogleMap>
                     </div>
                   )}
+
+                  <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div className="flex-1 flex flex-col gap-2">
+                       <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Radius</span>
+                          <span className="text-xs font-black text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-md">{radius}km</span>
+                       </div>
+                       <input 
+                         type="range" 
+                         min="5" 
+                         max="100" 
+                         step="5" 
+                         value={radius} 
+                         onChange={(e) => setRadius(Number(e.target.value))} 
+                         className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500" 
+                       />
+                    </div>
+                    <button 
+                      onClick={() => setIsLocationPickerExpanded(false)}
+                      className="bg-gray-900 text-white px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+                    >
+                      Apply
+                    </button>
+                  </div>
                 </div>
-                <div className="absolute top-4 left-4 right-4 z-50 flex gap-2 overflow-x-auto scrollbar-hide pointer-events-auto">
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </header>
+
+        <main className="flex-1 w-full flex flex-col items-center relative min-h-0 overflow-hidden bg-slate-50/50">
+          <AnimatePresence mode="wait">
+            {currentView === 'swipe' && (
+              <motion.div key="swipe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col relative">
+                <div className="absolute top-4 left-0 right-0 z-30 flex gap-2 px-6 overflow-x-auto scrollbar-hide pointer-events-auto">
                   {['All', 'Electronics', 'Fashion', 'Home', 'Hobbies'].map(cat => (
-                    <button key={cat} onClick={() => setActiveCategory(cat)} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${activeCategory === cat ? 'bg-cyan-500 text-white border-cyan-500 shadow-lg' : 'bg-black/40 text-white/70 border-white/10 backdrop-blur-md'}`}>{cat}</button>
+                    <button 
+                      key={cat} 
+                      onClick={() => setActiveCategory(cat)} 
+                      className={`whitespace-nowrap px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${activeCategory === cat ? 'bg-cyan-500 text-white border-cyan-500 shadow-lg shadow-cyan-500/20' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200'}`}
+                    >
+                      {cat}
+                    </button>
                   ))}
                 </div>
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-black/50 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10 shadow-2xl">
-                   <MapPin size={12} className="text-cyan-400" />
-                   <span className="text-[10px] font-black text-white uppercase tracking-widest">{radius}km</span>
-                   <input type="range" min="5" max="100" step="5" value={radius} onChange={(e) => setRadius(Number(e.target.value))} className="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+
+                <div className="flex-1 w-full relative flex items-center justify-center">
+                  {cards.length > 0 ? (
+                    <div className="relative w-full h-full">
+                      <AnimatePresence>
+                        {cards.map((item, index) => (
+                          <Card 
+                            key={item.id} 
+                            item={item} 
+                            active={index === 0}
+                            removeCard={removeCard}
+                            onSwap={setBiddingOnItem}
+                          />
+                        )).reverse()}
+                      </AnimatePresence>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center p-12">
+                      <div className="w-24 h-24 rounded-full bg-white shadow-xl flex items-center justify-center mb-6 relative">
+                        <Zap size={40} className="text-gray-200 fill-gray-50" />
+                        <div className="absolute inset-0 rounded-full border-2 border-dashed border-gray-100 animate-spin-slow" />
+                      </div>
+                      <h2 className="text-2xl font-black text-gray-900 mb-2">No more items!</h2>
+                      <p className="text-sm text-gray-400 max-w-[200px] font-medium">Expand your radius or check back later for new matches.</p>
+                      <button 
+                        onClick={() => setRadius(100)}
+                        className="mt-8 px-8 py-3.5 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all"
+                      >
+                        Expand Radius
+                      </button>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
             {currentView === 'offers' && <motion.div key="offers" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full h-full flex flex-col"><IncomingOffersView user={user} showToast={showToast} setCurrentView={setCurrentView} setMatchData={setMatchData} /></motion.div>}
             {currentView === 'inventory' && <InventoryView key="inventory" user={user} showToast={showToast} onSignOut={handleSignOut} />}
             {currentView === 'chat' && <ChatView key="chat" user={user} matchData={matchData} setCurrentView={setCurrentView} showToast={showToast} />}
+            {currentView === 'profile' && <ProfileView key="profile" user={user} onSignOut={handleSignOut} setCurrentView={setCurrentView} />}
+            {currentView === 'info' && <InfoView key="info" onBack={() => setCurrentView('profile')} />}
           </AnimatePresence>
         </main>
 
-        {currentView !== 'chat' && (
-          <nav className="h-20 bg-white border-t border-gray-100 flex items-center justify-around px-2 z-30 shrink-0">
-            <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-16 h-16 rounded-2xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600' : 'text-gray-400 hover:bg-gray-50'}`}><Zap size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">Explore</span></button>
-            <button onClick={() => setCurrentView('offers')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-16 h-16 rounded-2xl ${currentView === 'offers' ? 'bg-cyan-50 text-cyan-600' : 'text-gray-400 hover:bg-gray-50'}`}><MessageCircle size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">Offers</span></button>
-            <button onClick={() => setCurrentView('inventory')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-16 h-16 rounded-2xl ${currentView === 'inventory' ? 'bg-cyan-50 text-cyan-600' : 'text-gray-400 hover:bg-gray-50'}`}><PackageOpen size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">My Items</span></button>
+        {(!['chat', 'info'].includes(currentView)) && (
+          <nav className="h-24 bg-white border-t border-gray-100 flex items-center justify-around px-4 z-30 shrink-0 pb-4 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+            <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><Zap size={22} className={currentView === 'swipe' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Explore</span></button>
+            <button onClick={() => setCurrentView('offers')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'offers' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><MessageCircle size={22} className={currentView === 'offers' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Offers</span></button>
+            <button onClick={() => setCurrentView('inventory')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'inventory' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><PackageOpen size={22} className={currentView === 'inventory' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">My Items</span></button>
+            <button onClick={() => setCurrentView('profile')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'profile' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><User size={22} className={currentView === 'profile' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Profile</span></button>
           </nav>
         )}
 
