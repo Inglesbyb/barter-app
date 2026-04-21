@@ -13,7 +13,32 @@ body {
   background-color: #f9fafb;
   margin: 0;
   padding: 0;
-  overflow: hidden; /* Prevent scrolling while swiping */
+  overflow: hidden; 
+  height: 100dvh;
+  width: 100%;
+  position: fixed;
+}
+
+/* Smooth "Rubber-band" Scroll for Mobile */
+.scroll-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+
+.scroll-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Allow vertical scroll on cards while horizontal swipe is active */
+.swipe-card-container {
+  touch-action: pan-y !important;
+}
+
+/* Safe area padding for bottom navigation */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 100px);
 }
 
 @keyframes spin-slow {
@@ -24,4 +49,5 @@ body {
 .animate-spin-slow {
   animation: spin-slow 12s linear infinite;
 }
+
 

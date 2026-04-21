@@ -56,7 +56,7 @@ const Card = ({ item, active, removeCard, onSwap }) => {
         rotate: x.get() < 0 ? -45 : 45,
         transition: { duration: 0.4, ease: "easeOut" } 
       }}
-      className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing touch-none px-4 py-6"
+      className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing swipe-card-container px-4 py-6"
     >
       <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 bg-white">
         <img src={item.image_url} className="w-full h-full object-cover select-none pointer-events-none" alt={item.title} />
@@ -231,7 +231,7 @@ const IncomingOffersView = ({ user, showToast, setCurrentView, setMatchData }) =
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-slate-50">
+    <div className="w-full h-full flex flex-col bg-slate-50 scroll-container safe-area-bottom pb-32">
       <div className="px-6 py-6 border-b bg-white sticky top-0 z-10">
         <h2 className="text-2xl font-black text-gray-900 tracking-tight">Incoming Offers</h2>
         <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Pending approval</p>
@@ -323,7 +323,7 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
   if (loading) return <div className="flex-1 flex items-center justify-center bg-slate-50"><div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
-    <div className="w-full h-full flex flex-col bg-slate-50 overflow-y-auto pb-24">
+    <div className="w-full h-full flex flex-col bg-slate-50 scroll-container safe-area-bottom pb-32">
       <div className="bg-white px-8 pt-12 pb-10 rounded-b-[3.5rem] shadow-sm border-b border-gray-100 relative">
         <button onClick={() => setCurrentView('info')} className="absolute top-6 right-6 p-2 text-gray-400 hover:text-cyan-500 transition-colors">
           <Settings size={22} />
@@ -427,7 +427,7 @@ const InfoView = ({ onBack }) => {
   ];
 
   return (
-    <div className="w-full h-full flex flex-col bg-slate-50 overflow-y-auto pb-20">
+    <div className="w-full h-full flex flex-col bg-slate-50 scroll-container safe-area-bottom pb-32">
       <div className="px-6 py-8 flex items-center gap-4 bg-white border-b border-gray-100 sticky top-0 z-10">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
           <ArrowLeft size={24} />
@@ -673,11 +673,8 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full h-full flex flex-col gap-6 overflow-y-auto pb-8 pt-2 scrollbar-hide"
+    <div className="w-full h-full flex flex-col bg-slate-50 scroll-container safe-area-bottom pb-32">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6"
     >
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
         <h2 className="text-xl font-extrabold text-gray-900 mb-5 flex items-center gap-2">
@@ -1302,8 +1299,8 @@ export default function App() {
   if (!user) return <AuthView />;
 
   return (
-    <div className="h-screen bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
-      <div className="w-full max-w-md bg-white h-screen flex flex-col relative overflow-hidden shadow-2xl">
+    <div className="h-[100dvh] bg-black flex flex-col items-center font-sans overflow-hidden w-full relative">
+      <div className="w-full max-w-md bg-white h-[100dvh] flex flex-col relative overflow-hidden shadow-2xl">
         <header className="w-full px-6 py-4 flex flex-col z-40 bg-white shadow-sm border-b border-gray-100 sticky top-0 transition-all duration-500">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('swipe')}>
@@ -1436,7 +1433,7 @@ export default function App() {
                       </AnimatePresence>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center text-center p-12">
+                    <div className="flex flex-col items-center justify-center text-center p-12 z-0">
                       <div className="w-24 h-24 rounded-full bg-white shadow-xl flex items-center justify-center mb-6 relative">
                         <Zap size={40} className="text-gray-200 fill-gray-50" />
                         <div className="absolute inset-0 rounded-full border-2 border-dashed border-gray-100 animate-spin-slow" />
