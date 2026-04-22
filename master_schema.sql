@@ -1,4 +1,4 @@
--- Master Database Rewrite for SwitchR (v2 - Complete Audit)
+-- Master Database Rewrite for SwitchR (v3 - Relationship Fix)
 -- Run this in the Supabase SQL Editor
 
 -- 1. CLEANUP
@@ -26,7 +26,7 @@ CREATE TABLE public.profiles (
 -- 3. ITEMS TABLE
 CREATE TABLE public.items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE, -- Linked to profiles for easy joins
   title TEXT NOT NULL,
   condition TEXT,
   category TEXT,
@@ -43,8 +43,8 @@ CREATE TABLE public.items (
 -- 4. BIDS TABLE (Offers)
 CREATE TABLE public.bids (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bidder_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  bidder_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  receiver_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   item_offered_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
   item_wanted_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
   status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'declined'
@@ -54,17 +54,17 @@ CREATE TABLE public.bids (
 -- 5. MESSAGES TABLE
 CREATE TABLE public.messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  match_id TEXT NOT NULL, -- composite of user IDs
-  sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  match_id TEXT NOT NULL,
+  sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  receiver_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. SWIPES TABLE (For the Tinder Deck)
+-- 6. SWIPES TABLE
 CREATE TABLE public.swipes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  swiper_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  swiper_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   item_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
   direction TEXT NOT NULL, -- 'left', 'right'
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -74,8 +74,8 @@ CREATE TABLE public.swipes (
 -- 7. RATINGS TABLE
 CREATE TABLE public.ratings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  rater_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  ratee_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  rater_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  ratee_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   match_id TEXT,
   score INTEGER CHECK (score >= 1 AND score <= 5),
   comment TEXT,
@@ -101,7 +101,6 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- 9. ROW LEVEL SECURITY (RLS)
-
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public profiles" ON public.profiles FOR SELECT USING (true);
 CREATE POLICY "Profile owner update" ON public.profiles FOR UPDATE USING (auth.uid() = id);

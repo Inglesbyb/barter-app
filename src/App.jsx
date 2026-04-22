@@ -1255,23 +1255,93 @@ export default function App() {
     if (!user) return;
     const fetchItems = async () => {
       setLoadingItems(true);
-      let query = supabase
-        .from('items')
-        .select('*, profiles:user_id(id, username, avatar_url, rating, trades_completed, accepted_terms)')
-        .or('status.eq.active,status.is.null')
-        .neq('user_id', user.id)
-        .limit(100);
+      try {
+        console.log("🛠️ [DISCOVERY DIAGNOSTIC] Starting fetch for user:", user.id);
+        
+        // 1. Get already swiped items
+        const { data: swipes, error: swipeError } = await supabase
+          .from('swipes')
+          .select('item_id')
+          .eq('swiper_id', user.id);
+        
+        if (swipeError) {
+          console.warn("⚠️ [DISCOVERY] Could not fetch swipes (Table might be missing or RLS issue):", swipeError.message);
+        }
+        
+        const swipedIds = swipes?.map(s => s.item_id) || [];
+        console.log(`🚫 [DISCOVERY] Excluding ${swipedIds.length} swiped items:`, swipedIds);
 
-      if (activeCategory !== 'All') query = query.eq('category', activeCategory);
-      if (debouncedSearchQuery) query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
+        // 2. Query items
+        console.log("📡 [DISCOVERY] Querying Supabase 'items' table...");
+        let query = supabase
+          .from('items')
+          .select(`
+            *,
+            profiles (*)
+          `)
+          .neq('user_id', user.id)
+          .or('status.eq.active,status.is.null');
 
-      const { data, error } = await query;
-      if (!error) setAllItems(data || []);
-      setLoadingItems(false);
+        if (swipedIds.length > 0) {
+          query = query.not('id', 'in', `(${swipedIds.join(',')})`);
+        }
+
+        if (activeCategory !== 'All') query = query.eq('category', activeCategory);
+        if (debouncedSearchQuery) query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
+
+        const { data, error: itemError } = await query.limit(100);
+        
+        if (itemError) {
+          console.error("❌ [DISCOVERY] Supabase Query Error:", itemError.message);
+          console.error("Detail:", itemError.details);
+          console.error("Hint:", itemError.hint);
+          throw itemError;
+        }
+        
+        console.log(`📦 [DISCOVERY] Successfully fetched ${data?.length || 0} raw items from DB.`);
+        setAllItems(data || []);
+      } catch (err) {
+        console.error("🚨 [DISCOVERY] Critical Failure:", err);
+        showToast("Discovery error. Check database schema.", "error");
+      } finally {
+        setLoadingItems(false);
+      }
     };
     
     if (currentView === 'swipe') fetchItems();
-  }, [user, currentView, debouncedSearchQuery, activeCategory]);
+  }, [user, currentView, debouncedSearchQuery, activeCategory, radius]);
+
+  useEffect(() => {
+    if (allItems.length > 0) {
+      console.log("🧪 [DISCOVERY] Running distance filter on", allItems.length, "items...");
+      
+      const itemsWithDistance = allItems.map(item => {
+        if (!userLocation || item.lat === null || item.lng === null) {
+          return { ...item, calculatedDistance: null };
+        }
+        const dist = calculateDistance(userLocation.lat, userLocation.lng, item.lat, item.lng);
+        return { ...item, calculatedDistance: dist };
+      });
+
+      let filtered = itemsWithDistance.filter(item => {
+        if (!userLocation || item.calculatedDistance === null) return true;
+        return item.calculatedDistance <= radius;
+      });
+
+      console.log(`📊 [DISCOVERY] Found ${filtered.length} items within ${radius}km.`);
+
+      // Fallback: If no items found in radius, show all available items as "Explore Further"
+      if (filtered.length === 0 && allItems.length > 0) {
+        console.log("💡 [DISCOVERY] No items in radius. Activating Fallback Mode (showing all items).");
+        setCards(itemsWithDistance);
+      } else {
+        setCards(filtered);
+      }
+    } else {
+      console.log("📭 [DISCOVERY] No items found in database (excluding yours and swiped).");
+      setCards([]);
+    }
+  }, [allItems, radius, userLocation]);
 
   const geocodeLocation = async (query) => {
     if (!query.trim() || !window.google) return;
@@ -1290,19 +1360,6 @@ export default function App() {
       }
     });
   };
-
-  useEffect(() => {
-    if (userLocation && allItems.length > 0) {
-      const filtered = allItems.map(item => {
-        if (!item.lat || !item.lng) return { ...item, calculatedDistance: null };
-        const dist = calculateDistance(userLocation.lat, userLocation.lng, item.lat, item.lng);
-        return { ...item, calculatedDistance: dist };
-      }).filter(item => item.calculatedDistance !== null && item.calculatedDistance <= radius);
-      setCards(filtered);
-    } else {
-      setCards(allItems);
-    }
-  }, [allItems, radius, userLocation]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
