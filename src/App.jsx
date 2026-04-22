@@ -601,6 +601,30 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
     setIsSubmitting(true);
 
     try {
+      // 1. Bulletproof Profile Check: Ensure a profile exists to satisfy the foreign key constraint
+      const { data: profileCheck, error: profileCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle(); // Use maybeSingle to avoid throwing a 406 error if zero rows are returned
+
+      if (!profileCheck) {
+        console.log("⚠️ Profile missing for user. Creating fallback profile...");
+        const defaultUsername = user.user_metadata?.username || user.email?.split('@')[0] || 'Trader';
+        const { error: profileCreateError } = await supabase
+          .from('profiles')
+          .insert([{ 
+            id: user.id, 
+            username: defaultUsername,
+            avatar_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`
+          }]);
+        
+        if (profileCreateError) {
+          throw new Error("Foreign Key Resolution Failed: Could not create fallback profile - " + profileCreateError.message);
+        }
+        console.log("✅ Fallback profile created successfully.");
+      }
+
       let image_url = null;
       if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
