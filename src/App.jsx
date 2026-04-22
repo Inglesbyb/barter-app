@@ -1234,8 +1234,13 @@ export default function App() {
 
   useEffect(() => {
     const checkTerms = async (userId) => {
-      const { data } = await supabase.from('profiles').select('accepted_terms').eq('id', userId).single();
-      if (data && !data.accepted_terms) {
+      // Use maybeSingle() to avoid 406 errors when profile row doesn't exist yet
+      const { data, error } = await supabase.from('profiles').select('accepted_terms').eq('id', userId).maybeSingle();
+      if (error) {
+        console.warn('[TERMS CHECK] Could not load profile:', error.message);
+        return; // Non-blocking — don't block app load
+      }
+      if (data && data.accepted_terms === false) {
         setShowTermsModal(true);
         setHasAcceptedTerms(false);
       } else {
@@ -1513,9 +1518,14 @@ export default function App() {
                   ))}
                 </div>
 
-                <div className="flex-1 w-full relative flex items-center justify-center">
-                  {cards.length > 0 ? (
-                    <div className="relative w-full h-full">
+                <div className="flex-1 w-full relative flex items-center justify-center" style={{ minHeight: '500px' }}>
+                  {loadingItems ? (
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Finding matches...</p>
+                    </div>
+                  ) : cards.length > 0 ? (
+                    <div className="absolute inset-0">
                       <AnimatePresence>
                         {cards.map((item, index) => (
                           <Card 
