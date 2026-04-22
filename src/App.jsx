@@ -344,7 +344,7 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
             )}
             <div className="flex items-center gap-1 bg-yellow-400/10 text-yellow-600 px-2 py-0.5 rounded-full text-[10px] font-black">
               <Star size={10} className="fill-yellow-600" />
-              {profile?.rating?.toFixed(1) || '5.0'}
+              {Number(profile?.rating || 5.0).toFixed(1)}
             </div>
           </div>
           
@@ -959,6 +959,7 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
   const markAsSwapped = async () => {
     if (!window.confirm("Are you sure? This will mark the item as swapped and prompt for ratings.")) return;
     
+    // Update items status
     const { data: myItems } = await supabase.from('items').select('id').eq('user_id', user.id);
     if (myItems && myItems.length > 0) {
       const myItemIds = myItems.map(i => i.id);
@@ -979,11 +980,15 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
         score: parsedScore
       }]);
 
-      const { data: profile } = await supabase.from('profiles').select('total_swaps, average_rating').eq('id', matchData.user_id).single();
+      // Update recipient's profile stats
+      const { data: profile } = await supabase.from('profiles').select('trades_completed, rating').eq('id', matchData.user_id).single();
       if (profile) {
-        const newTotal = (profile.total_swaps || 0) + 1;
-        const newAvg = profile.average_rating ? ((profile.average_rating * profile.total_swaps) + parsedScore) / newTotal : parsedScore;
-        await supabase.from('profiles').update({ total_swaps: newTotal, average_rating: Number(newAvg.toFixed(1)) }).eq('id', matchData.user_id);
+        const newTotal = (profile.trades_completed || 0) + 1;
+        const newRating = profile.rating ? ((Number(profile.rating) * (newTotal - 1)) + parsedScore) / newTotal : parsedScore;
+        await supabase.from('profiles').update({ 
+          trades_completed: newTotal, 
+          rating: Number(newRating.toFixed(1)) 
+        }).eq('id', matchData.user_id);
       }
 
       showToast("Rating submitted! Thank you.", "success");
@@ -1178,9 +1183,18 @@ export default function App() {
   const [viewingProfile, setViewingProfile] = useState(null);
   const [isLocationPickerExpanded, setIsLocationPickerExpanded] = useState(false);
 
-  const removeCard = (id, direction) => {
+  const removeCard = async (id, direction) => {
     setCards(prev => prev.filter(card => card.id !== id));
     setLastAction({ id, direction });
+    
+    // Persist swipe to database
+    if (user) {
+      await supabase.from('swipes').insert([{
+        swiper_id: user.id,
+        item_id: id,
+        direction: direction
+      }]);
+    }
   };
 
   const showToast = (message, type = 'success') => {
@@ -1243,7 +1257,7 @@ export default function App() {
       setLoadingItems(true);
       let query = supabase
         .from('items')
-        .select('*, profiles:user_id(id, username, avatar_url, average_rating, total_swaps, accepted_terms)')
+        .select('*, profiles:user_id(id, username, avatar_url, rating, trades_completed, accepted_terms)')
         .or('status.eq.active,status.is.null')
         .neq('user_id', user.id)
         .limit(100);
