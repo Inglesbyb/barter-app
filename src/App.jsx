@@ -1,8 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion';
-import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2, ChevronDown, Settings, HelpCircle, LogOut, ChevronRight, Shield, Users, User } from 'lucide-react';
+import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2, ChevronDown, Settings, HelpCircle, LogOut, ChevronRight, Shield, Users, User, Leaf } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import { supabase } from './supabase';
+
+// ─── Eco-Impact Registry (kg CO₂ saved vs buying new) ───────────────────────
+const EcoImpactRegistry = {
+  Electronics: { Smartphone: 50, Laptop: 210, Tablet: 80, 'Gaming Console': 100, Headphones: 10 },
+  Fashion:     { Jeans: 25, 'Jacket/Coat': 35, Sneakers: 15, 'T-shirt': 4, 'Designer Bag': 20 },
+  Home:        { 'Office Chair': 70, Desk: 100, Sofa: 110, 'Kitchen Appliance': 40, Lamp: 12 },
+  Hobbies:     { Bicycle: 150, Book: 2, 'Sports Equipment': 30, 'Musical Instrument': 50 },
+};
+
+// Helper: get CO2 for a given category + sub_category
+const getCO2 = (category, subCategory) => {
+  if (!category || !subCategory) return null;
+  return EcoImpactRegistry[category]?.[subCategory] ?? null;
+};
+
+// Helper: get sub-category list for a category
+const getSubCategories = (category) => Object.keys(EcoImpactRegistry[category] || {});
 
 const mapContainerStyle = {
   width: '100%',
@@ -78,6 +95,11 @@ const Card = ({ item, active, removeCard, onSwap }) => {
              <span className="bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/20">
                 {item.condition}
              </span>
+             {item.co2_saved_kg && (
+               <span className="bg-emerald-500/80 backdrop-blur-md text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1 border border-emerald-400/30">
+                 <Leaf size={9} className="fill-white" />~{item.co2_saved_kg}kg CO₂
+               </span>
+             )}
           </div>
           <h2 className="text-3xl font-black mb-1 tracking-tight leading-none drop-shadow-2xl">{item.title}</h2>
           <p className="text-xs text-gray-300 font-medium line-clamp-2 mb-6 opacity-90">{item.description}</p>
@@ -362,7 +384,21 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
         </div>
       </div>
 
-      <div className="px-6 mt-10">
+      <div className="px-6 mt-8">
+        {/* Green Impact Hero */}
+        <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-[2.5rem] p-6 text-white shadow-xl shadow-emerald-500/20 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <Leaf size={20} className="fill-white text-white" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100">Your Green Impact</p>
+              <p className="text-2xl font-black leading-none">{Number(profile?.total_carbon_saved || 0).toFixed(1)}kg</p>
+            </div>
+          </div>
+          <p className="text-xs text-emerald-100 font-medium">of CO₂ saved by trading instead of buying new. Keep swapping to grow your impact! 🌍</p>
+        </div>
+
         <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-4 ml-2">Trader Bio</h3>
         <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm relative">
            <div className="absolute top-0 right-10 w-4 h-4 bg-white rotate-45 -translate-y-2 border-l border-t border-gray-100" />
@@ -472,6 +508,7 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
   const [title, setTitle] = useState('');
   const [condition, setCondition] = useState('Brand New');
   const [category, setCategory] = useState('Electronics');
+  const [subCategory, setSubCategory] = useState('Smartphone');
   const [estimatedValue, setEstimatedValue] = useState('');
   const [description, setDescription] = useState('');
   const [postSuccess, setPostSuccess] = useState(false);
@@ -487,11 +524,22 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
   const [loadingItems, setLoadingItems] = useState(true);
   const [editingItemId, setEditingItemId] = useState(null);
 
+  // Eco-impact derived from registry
+  const ecoImpactKg = getCO2(category, subCategory);
+  const subCategories = getSubCategories(category);
+
+  // Reset sub-category when category changes
+  useEffect(() => {
+    const subs = getSubCategories(category);
+    setSubCategory(subs[0] || '');
+  }, [category]);
+
   const handleEdit = (item) => {
     setEditingItemId(item.id);
     setTitle(item.title);
     setCondition(item.condition);
     setCategory(item.category);
+    setSubCategory(item.sub_category || getSubCategories(item.category)[0] || '');
     setEstimatedValue(item.estimated_value || '');
     setDescription(item.description || '');
     setLookingFor(item.looking_for || '');
@@ -644,7 +692,8 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
       const itemData = {
         title, 
         condition, 
-        category, 
+        category,
+        sub_category: subCategory,
         estimated_value: parsedEstimatedValue, 
         description, 
         looking_for: lookingFor, 
@@ -652,7 +701,8 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
         image_url: image_url || imagePreview, 
         lat: location?.lat || null, 
         lng: location?.lng || null, 
-        status: 'active'
+        status: 'active',
+        co2_saved_kg: getCO2(category, subCategory)
       };
 
       if (editingItemId) {
@@ -717,6 +767,8 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
               className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium" 
             />
           </div>
+
+          {/* Category + Sub-category */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1.5">Category</label>
@@ -725,26 +777,52 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium text-gray-700 appearance-none"
               >
-                <option>Electronics</option>
-                <option>Fashion</option>
-                <option>Home</option>
-                <option>Hobbies</option>
+                {Object.keys(EcoImpactRegistry).map(c => <option key={c}>{c}</option>)}
                 <option>Other</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Condition</label>
+              <label className="block text-sm font-bold text-gray-700 mb-1.5">Item Type</label>
               <select 
-                value={condition}
-                onChange={(e) => setCondition(e.target.value)}
+                value={subCategory}
+                onChange={(e) => setSubCategory(e.target.value)}
                 className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium text-gray-700 appearance-none"
               >
-                <option>Brand New</option>
-                <option>Like New</option>
-                <option>Good</option>
-                <option>Fair</option>
+                {subCategories.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* Live Eco-Impact Badge */}
+          {ecoImpactKg && (
+            <motion.div
+              key={ecoImpactKg}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4"
+            >
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                <Leaf size={18} className="text-emerald-600 fill-emerald-600" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">🍃 Eco-Impact Estimate</p>
+                <p className="text-sm font-bold text-emerald-800">Swapping saves ~<span className="text-lg font-black">{ecoImpactKg}kg</span> of CO₂</p>
+              </div>
+            </motion.div>
+          )}
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">Condition</label>
+            <select 
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
+              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium text-gray-700 appearance-none"
+            >
+              <option>Brand New</option>
+              <option>Like New</option>
+              <option>Good</option>
+              <option>Fair</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">Est. Value (Optional)</label>
@@ -944,11 +1022,17 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
     const fetchMessages = async () => {
       const { data } = await supabase.from('messages').select('*').eq('match_id', matchId).order('created_at', { ascending: true });
       if (data) {
-        if (data.length === 0) {
-          setMessages([{ id: 'system', sender_id: 'system', content: "You both liked each other's items! Start the conversation." }]);
+        const systemMsgs = [];
+        // Eco-impact planet-win bubble
+        const myItemCO2 = Number(matchData?.my_item_co2 || 0);
+        const theirItemCO2 = Number(matchData?.their_item_co2 || 0);
+        const totalCO2 = myItemCO2 + theirItemCO2;
+        if (totalCO2 > 0) {
+          systemMsgs.push({ id: 'eco', sender_id: 'system', content: `🌱 Planet Win! Swapping these items will save approximately ${totalCO2}kg of CO₂ compared to buying new.` });
         } else {
-          setMessages(data);
+          systemMsgs.push({ id: 'system', sender_id: 'system', content: "You both liked each other's items! Start the conversation." });
         }
+        setMessages(data.length === 0 ? systemMsgs : data);
       }
       setLoading(false);
     };
@@ -983,15 +1067,30 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
   const markAsSwapped = async () => {
     if (!window.confirm("Are you sure? This will mark the item as swapped and prompt for ratings.")) return;
     
-    // Update items status
-    const { data: myItems } = await supabase.from('items').select('id').eq('user_id', user.id);
+    // Fetch both items involved in this match to calculate combined CO2
+    const { data: myItems } = await supabase.from('items').select('id, co2_saved_kg').eq('user_id', user.id);
+    let myCO2 = 0;
+    let theirItemId = null;
+
     if (myItems && myItems.length > 0) {
       const myItemIds = myItems.map(i => i.id);
       const { data: theirSwipes } = await supabase.from('swipes').select('item_id').eq('swiper_id', matchData.user_id).in('item_id', myItemIds).eq('direction', 'right').limit(1);
       if (theirSwipes && theirSwipes.length > 0) {
-        await supabase.from('items').update({ status: 'swapped' }).eq('id', theirSwipes[0].item_id).eq('user_id', user.id);
+        theirItemId = theirSwipes[0].item_id;
+        await supabase.from('items').update({ status: 'swapped' }).eq('id', theirItemId).eq('user_id', user.id);
+        const matchedItem = myItems.find(i => i.id === theirItemId);
+        myCO2 = Number(matchedItem?.co2_saved_kg || 0);
       }
     }
+
+    // Fetch their item's CO2
+    let theirCO2 = 0;
+    if (matchData.item_offered_id) {
+      const { data: theirItem } = await supabase.from('items').select('co2_saved_kg').eq('id', matchData.item_offered_id).maybeSingle();
+      theirCO2 = Number(theirItem?.co2_saved_kg || 0);
+    }
+    const combinedCO2 = myCO2 + theirCO2;
+
     showToast("Your item was marked as swapped!", "success");
     
     const score = window.prompt("Rate this user from 1 to 5 stars:");
@@ -1004,17 +1103,27 @@ const ChatView = ({ user, matchData, setCurrentView, showToast }) => {
         score: parsedScore
       }]);
 
-      // Update recipient's profile stats
-      const { data: profile } = await supabase.from('profiles').select('trades_completed, rating').eq('id', matchData.user_id).single();
-      if (profile) {
-        const newTotal = (profile.trades_completed || 0) + 1;
-        const newRating = profile.rating ? ((Number(profile.rating) * (newTotal - 1)) + parsedScore) / newTotal : parsedScore;
+      // Update recipient's profile stats + CO2
+      const { data: theirProfile } = await supabase.from('profiles').select('trades_completed, rating, total_carbon_saved').eq('id', matchData.user_id).single();
+      if (theirProfile) {
+        const newTotal = (theirProfile.trades_completed || 0) + 1;
+        const newRating = theirProfile.rating ? ((Number(theirProfile.rating) * (newTotal - 1)) + parsedScore) / newTotal : parsedScore;
         await supabase.from('profiles').update({ 
           trades_completed: newTotal, 
-          rating: Number(newRating.toFixed(1)) 
+          rating: Number(newRating.toFixed(1)),
+          total_carbon_saved: Number(theirProfile.total_carbon_saved || 0) + combinedCO2
         }).eq('id', matchData.user_id);
       }
 
+      // Update current user's CO2 too
+      const { data: myProfile } = await supabase.from('profiles').select('total_carbon_saved').eq('id', user.id).single();
+      if (myProfile) {
+        await supabase.from('profiles').update({
+          total_carbon_saved: Number(myProfile.total_carbon_saved || 0) + combinedCO2
+        }).eq('id', user.id);
+      }
+
+      if (combinedCO2 > 0) showToast(`🌱 Together you saved ${combinedCO2}kg of CO₂!`, 'success');
       showToast("Rating submitted! Thank you.", "success");
     }
     
