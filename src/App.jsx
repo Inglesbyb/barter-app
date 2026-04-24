@@ -3,23 +3,23 @@ import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-mo
 import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2, ChevronDown, Settings, HelpCircle, LogOut, ChevronRight, Shield, Users, User, Leaf } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import { supabase } from './supabase';
+import { TAXONOMY, CATEGORY_FALLBACK_CO2, searchTaxonomy } from './taxonomy';
 
-// ─── Eco-Impact Registry (kg CO₂ saved vs buying new) ───────────────────────
-const EcoImpactRegistry = {
-  Electronics: { Smartphone: 50, Laptop: 210, Tablet: 80, 'Gaming Console': 100, Headphones: 10 },
-  Fashion:     { Jeans: 25, 'Jacket/Coat': 35, Sneakers: 15, 'T-shirt': 4, 'Designer Bag': 20 },
-  Home:        { 'Office Chair': 70, Desk: 100, Sofa: 110, 'Kitchen Appliance': 40, Lamp: 12 },
-  Hobbies:     { Bicycle: 150, Book: 2, 'Sports Equipment': 30, 'Musical Instrument': 50 },
-};
-
-// Helper: get CO2 for a given category + sub_category
+// getCO2 uses the imported taxonomy
 const getCO2 = (category, subCategory) => {
-  if (!category || !subCategory) return null;
-  return EcoImpactRegistry[category]?.[subCategory] ?? null;
+  const entry = TAXONOMY.find(t => t.category === category && t.label === subCategory);
+  if (entry) return entry.co2;
+  return CATEGORY_FALLBACK_CO2[category] || null;
 };
 
-// Helper: get sub-category list for a category
-const getSubCategories = (category) => Object.keys(EcoImpactRegistry[category] || {});
+// Quick-select chips
+const QUICK_CHIPS = [
+  { label: 'Smartphone',     category: 'Electronics', co2: 70  },
+  { label: 'Laptop',         category: 'Electronics', co2: 340 },
+  { label: 'Sneakers',       category: 'Fashion',     co2: 14  },
+  { label: 'Road Bike',      category: 'Sports',      co2: 190 },
+  { label: 'Ergonomic Chair',category: 'Home',        co2: 120 },
+];
 
 const mapContainerStyle = {
   width: '100%',
@@ -507,8 +507,18 @@ const InfoView = ({ onBack }) => {
 const InventoryView = ({ user, showToast, onSignOut }) => {
   const [title, setTitle] = useState('');
   const [condition, setCondition] = useState('Brand New');
-  const [category, setCategory] = useState('Electronics');
-  const [subCategory, setSubCategory] = useState('Smartphone');
+  // Taxonomy search state
+  const [taxSearch, setTaxSearch] = useState('');       // what user types
+  const [taxResults, setTaxResults] = useState([]);     // filtered suggestions
+  const [selectedTax, setSelectedTax] = useState(null); // locked selection { label, category, co2 }
+  const [taxOpen, setTaxOpen] = useState(false);
+  const taxRef = React.useRef(null);
+
+  // Derived values written to DB
+  const category    = selectedTax?.category || 'Other';
+  const subCategory = selectedTax?.label    || '';
+  const ecoImpactKg = selectedTax?.co2      || null;
+
   const [estimatedValue, setEstimatedValue] = useState('');
   const [description, setDescription] = useState('');
   const [postSuccess, setPostSuccess] = useState(false);
@@ -519,35 +529,45 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [location, setLocation] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
-  
   const [myItems, setMyItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [editingItemId, setEditingItemId] = useState(null);
 
-  // Eco-impact derived from registry
-  const ecoImpactKg = getCO2(category, subCategory);
-  const subCategories = getSubCategories(category);
-
-  // Reset sub-category when category changes
+  // Fuzzy search using taxonomy.js searchTaxonomy function
   useEffect(() => {
-    const subs = getSubCategories(category);
-    setSubCategory(subs[0] || '');
-  }, [category]);
+    if (!taxSearch.trim()) { setTaxResults([]); return; }
+    setTaxResults(searchTaxonomy(taxSearch, 8));
+  }, [taxSearch]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => { if (taxRef.current && !taxRef.current.contains(e.target)) setTaxOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectTaxItem = (item) => {
+    setSelectedTax(item);
+    setTaxSearch('');
+    setTaxResults([]);
+    setTaxOpen(false);
+  };
 
   const handleEdit = (item) => {
     setEditingItemId(item.id);
     setTitle(item.title);
     setCondition(item.condition);
-    setCategory(item.category);
-    setSubCategory(item.sub_category || getSubCategories(item.category)[0] || '');
+    // Restore taxonomy selection from stored fields
+    const stored = TAXONOMY.find(t => t.label === item.sub_category && t.category === item.category);
+    if (stored) { setSelectedTax(stored); } else if (item.category) {
+      setSelectedTax({ label: item.sub_category || '', category: item.category, co2: item.co2_saved_kg || null });
+    }
     setEstimatedValue(item.estimated_value || '');
     setDescription(item.description || '');
     setLookingFor(item.looking_for || '');
     setImagePreview(item.image_url);
     setImageFile(null);
-    if (item.lat && item.lng) {
-      setLocation({ lat: item.lat, lng: item.lng });
-    }
+    if (item.lat && item.lng) setLocation({ lat: item.lat, lng: item.lng });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -716,7 +736,7 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
         showToast('Item successfully posted! 🎉', 'success');
       }
 
-      setTitle(''); setCondition('Brand New'); setCategory('Electronics'); setEstimatedValue(''); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null); setEditingItemId(null);
+      setTitle(''); setCondition('Brand New'); setSelectedTax(null); setTaxSearch(''); setEstimatedValue(''); setDescription(''); setLookingFor(''); setImageFile(null); setImagePreview(null); setEditingItemId(null);
       setPostSuccess(true);
       fetchMyItems();
       setTimeout(() => {
@@ -768,29 +788,95 @@ const InventoryView = ({ user, showToast, onSignOut }) => {
             />
           </div>
 
-          {/* Category + Sub-category */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Category</label>
-              <select 
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium text-gray-700 appearance-none"
-              >
-                {Object.keys(EcoImpactRegistry).map(c => <option key={c}>{c}</option>)}
-                <option>Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Item Type</label>
-              <select 
-                value={subCategory}
-                onChange={(e) => setSubCategory(e.target.value)}
-                className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium text-gray-700 appearance-none"
-              >
-                {subCategories.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
+          {/* ─── Taxonomy Search-to-Select ─────────────────────────────── */}
+          <div ref={taxRef} className="relative">
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">What are you listing?</label>
+
+            {/* Locked selection badge */}
+            {selectedTax ? (
+              <div className="flex items-center gap-3 p-3.5 bg-cyan-50 border-2 border-cyan-400 rounded-xl">
+                <div className="flex-1">
+                  <p className="font-black text-gray-900 text-sm leading-none">{selectedTax.label}</p>
+                  <p className="text-[10px] text-cyan-600 font-bold uppercase tracking-widest mt-0.5">{selectedTax.category}</p>
+                </div>
+                {selectedTax.co2 && (
+                  <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-full">
+                    <Leaf size={9} className="fill-emerald-700" />~{selectedTax.co2}kg CO₂
+                  </span>
+                )}
+                <button type="button" onClick={() => setSelectedTax(null)} className="p-1 text-gray-400 hover:text-rose-500 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={taxSearch}
+                  onChange={e => { setTaxSearch(e.target.value); setTaxOpen(true); }}
+                  onFocus={() => setTaxOpen(true)}
+                  placeholder="Search: Laptop, Sneakers, Road Bike..."
+                  className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-medium"
+                />
+              </div>
+            )}
+
+            {/* Floating suggestion list */}
+            <AnimatePresence>
+              {taxOpen && taxResults.length > 0 && !selectedTax && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/10 overflow-hidden"
+                >
+                  {taxResults.map(item => (
+                    <button
+                      key={`${item.category}-${item.label}`}
+                      type="button"
+                      onClick={() => selectTaxItem(item)}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-cyan-50 transition-colors text-left border-b border-gray-50 last:border-0"
+                    >
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm">{item.label}</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{item.category}</p>
+                      </div>
+                      <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">
+                        <Leaf size={8} />~{item.co2}kg
+                      </span>
+                    </button>
+                  ))}
+                  {/* Custom/Other fallback */}
+                  <button
+                    type="button"
+                    onClick={() => selectTaxItem({ label: taxSearch, category: 'Other', co2: null })}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                      <Tag size={12} className="text-gray-400" />
+                    </div>
+                    <p className="text-sm font-bold text-gray-600">List as “{taxSearch}” (Custom)</p>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Quick-select chips */}
+            {!selectedTax && (
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {QUICK_CHIPS.map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => selectTaxItem(chip)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs font-bold text-gray-600 hover:border-cyan-400 hover:text-cyan-600 hover:bg-cyan-50 transition-all active:scale-95"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Live Eco-Impact Badge */}
