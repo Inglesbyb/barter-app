@@ -1396,11 +1396,22 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const [isDiscoveryMode, setIsDiscoveryMode] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(true);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [viewingProfile, setViewingProfile] = useState(null);
   const [isLocationPickerExpanded, setIsLocationPickerExpanded] = useState(false);
+
+  // Fisher-Yates shuffle for Discovery Mode
+  const shuffleArray = (arr) => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
 
   const removeCard = async (id, direction) => {
     setCards(prev => prev.filter(card => card.id !== id));
@@ -1511,7 +1522,12 @@ export default function App() {
         }
 
         if (activeCategory !== 'All') query = query.eq('category', activeCategory);
-        if (debouncedSearchQuery) query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
+        if (debouncedSearchQuery) {
+          // Search title, description AND sub_category so 'bike' finds 'Road Bike'
+          query = query.or(
+            `title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%,sub_category.ilike.%${debouncedSearchQuery}%`
+          );
+        }
 
         const { data, error: itemError } = await query.limit(100);
         
@@ -1554,18 +1570,19 @@ export default function App() {
 
       console.log(`📊 [DISCOVERY] Found ${filtered.length} items within ${radius}km.`);
 
-      // Fallback: If no items found in radius, show all available items as "Explore Further"
+      // Fallback: If no items found in radius, show all available items
       if (filtered.length === 0 && allItems.length > 0) {
-        console.log("💡 [DISCOVERY] No items in radius. Activating Fallback Mode (showing all items).");
-        setCards(itemsWithDistance);
-      } else {
-        setCards(filtered);
+        console.log("💡 [DISCOVERY] No items in radius. Activating Fallback Mode.");
+        filtered = itemsWithDistance;
       }
+
+      // Discovery Mode: shuffle the final set so every session feels fresh
+      setCards(isDiscoveryMode ? shuffleArray(filtered) : filtered);
     } else {
       console.log("📭 [DISCOVERY] No items found in database (excluding yours and swiped).");
       setCards([]);
     }
-  }, [allItems, radius, userLocation]);
+  }, [allItems, radius, userLocation, isDiscoveryMode]);
 
   const geocodeLocation = async (query) => {
     if (!query.trim() || !window.google) return;
@@ -1701,16 +1718,59 @@ export default function App() {
           <AnimatePresence mode="wait">
             {currentView === 'swipe' && (
               <motion.div key="swipe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col relative">
-                <div className="absolute top-4 left-0 right-0 z-30 flex gap-2 px-6 overflow-x-auto scrollbar-hide pointer-events-auto">
-                  {['All', 'Electronics', 'Fashion', 'Home', 'Hobbies'].map(cat => (
-                    <button 
-                      key={cat} 
-                      onClick={() => setActiveCategory(cat)} 
-                      className={`whitespace-nowrap px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${activeCategory === cat ? 'bg-cyan-500 text-white border-cyan-500 shadow-lg shadow-cyan-500/20' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200'}`}
+                {/* ── Search bar + Discovery toggle ── */}
+                <div className="absolute top-3 left-0 right-0 z-30 px-4 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => { setSearchQuery(e.target.value); setIsDiscoveryMode(false); }}
+                        placeholder="Search anything..."
+                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-full text-xs font-bold text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400 shadow-sm transition-all"
+                      />
+                      {searchQuery && (
+                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsDiscoveryMode(d => !d);
+                        setSearchQuery('');
+                        setActiveCategory('All');
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border-2 transition-all shrink-0 ${
+                        isDiscoveryMode
+                          ? 'bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/30'
+                          : 'bg-white text-gray-400 border-gray-200 hover:border-violet-300 hover:text-violet-500'
+                      }`}
                     >
-                      {cat}
+                      <Zap size={12} className={isDiscoveryMode ? 'fill-white' : ''} />
+                      {isDiscoveryMode ? 'Random' : 'Discover'}
                     </button>
-                  ))}
+                  </div>
+
+                  {/* Category chips — hidden when searching */}
+                  {!searchQuery && (
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide pointer-events-auto pb-0.5">
+                      {['All', 'Electronics', 'Fashion', 'Home', 'Hobbies', 'Appliances', 'Sports', 'Music'].map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => { setActiveCategory(cat); setIsDiscoveryMode(false); }}
+                          className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                            activeCategory === cat && !isDiscoveryMode
+                              ? 'bg-cyan-500 text-white border-cyan-500 shadow-lg shadow-cyan-500/20'
+                              : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex-1 w-full relative flex items-center justify-center" style={{ minHeight: '500px' }}>
