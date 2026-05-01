@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion';
-import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2, ChevronDown, Settings, HelpCircle, LogOut, ChevronRight, Shield, Users, User, Leaf } from 'lucide-react';
+import { Heart, X, MapPin, Undo2, Zap, Upload, PackageOpen, MessageCircle, ArrowLeft, Send, Search, Trash2, Edit2, Star, Tag, BadgeCheck, CheckCircle2, ChevronDown, Settings, HelpCircle, LogOut, ChevronRight, Shield, Users, User, Leaf, RefreshCw, Link2 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import { supabase } from './supabase';
 import { TAXONOMY, CATEGORY_FALLBACK_CO2, searchTaxonomy } from './taxonomy';
@@ -1555,6 +1555,233 @@ const TermsModal = ({ onAccept }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════════
+// Chain Discovery Card
+// ═══════════════════════════════════════════════════════════
+const ChainDiscoveryCard = ({ chain, userId, onAccepted, showToast }) => {
+  const [accepting, setAccepting] = useState(false);
+  const [accepted, setAccepted]   = useState(false);
+
+  const steps = chain.chain;
+  const myStep = steps.find(s => s.user_id === userId);
+  const totalParts = steps.length;
+  const co2Total = steps.reduce((sum, s) =>
+    sum + (getCO2(null, s.gives_item?.sub_category) || 0), 0);
+
+  const handleAccept = async () => {
+    setAccepting(true);
+    try {
+      // Upsert a chain_proposal row and add self to acceptances
+      const participantIds = steps.map(s => s.user_id);
+      // Check if proposal exists already
+      const { data: existing } = await supabase
+        .from('chain_proposals')
+        .select('id, acceptances, participant_ids')
+        .contains('participant_ids', participantIds)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (existing) {
+        const newAcceptances = [...new Set([...existing.acceptances, userId])];
+        const allAccepted = participantIds.every(id => newAcceptances.includes(id));
+        await supabase.from('chain_proposals').update({
+          acceptances: newAcceptances,
+          status: allAccepted ? 'active' : 'pending'
+        }).eq('id', existing.id);
+        if (allAccepted) showToast('🔗 Chain Activated! All parties agreed!', 'success');
+        else showToast('✓ You joined the chain. Waiting for others…', 'success');
+      } else {
+        await supabase.from('chain_proposals').insert([{
+          chain_data: chain,
+          participant_ids: participantIds,
+          acceptances: [userId]
+        }]);
+        showToast('✓ You joined the chain. Waiting for others…', 'success');
+      }
+      setAccepted(true);
+      onAccepted?.();
+    } catch (e) {
+      showToast('Failed to accept chain.', 'error');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-3xl border border-violet-100 shadow-lg shadow-violet-500/5 overflow-hidden mb-4"
+    >
+      {/* Header */}
+      <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+          <RefreshCw size={18} className="text-white animate-spin" style={{ animationDuration: '3s' }} />
+        </div>
+        <div className="flex-1">
+          <p className="text-[10px] font-black uppercase tracking-widest text-violet-200">Chain Match — {totalParts}-Way Swap</p>
+          <p className="text-white font-black text-sm leading-tight">Circular Trade Opportunity</p>
+        </div>
+        {co2Total > 0 && (
+          <span className="flex items-center gap-1 bg-emerald-400/20 text-emerald-200 text-[10px] font-black px-2 py-1 rounded-full">
+            <Leaf size={9} />~{co2Total}kg CO₂
+          </span>
+        )}
+      </div>
+
+      {/* Chain visualization */}
+      <div className="px-5 py-4">
+        {steps.map((step, idx) => (
+          <div key={step.user_id}>
+            <div className={`flex items-center gap-3 py-2 px-3 rounded-2xl ${
+              step.user_id === userId ? 'bg-violet-50 border border-violet-200' : 'bg-stone-50'
+            }`}>
+              <img
+                src={step.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${step.user_id}`}
+                className="w-9 h-9 rounded-full border-2 border-white shadow-sm shrink-0"
+                alt={step.username}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black text-stone-900 truncate">
+                  {step.user_id === userId ? 'You' : step.username}
+                </p>
+                <p className="text-[10px] text-stone-400 font-bold truncate">
+                  gives <span className="text-stone-700">{step.gives_item?.title}</span>
+                </p>
+              </div>
+              {step.gives_item?.image_url && (
+                <img
+                  src={step.gives_item.image_url}
+                  className="w-10 h-10 rounded-xl object-cover border border-stone-100 shrink-0"
+                  alt={step.gives_item.title}
+                />
+              )}
+            </div>
+            {idx < steps.length - 1 && (
+              <div className="flex items-center gap-2 pl-7 py-1">
+                <div className="flex flex-col items-center gap-0.5">
+                  <div className="w-0.5 h-2 bg-violet-200 rounded" />
+                  <div className="w-0.5 h-2 bg-violet-200 rounded" />
+                </div>
+                <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest">
+                  → to {steps[idx + 1]?.user_id === userId ? 'you' : steps[idx + 1]?.username}
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+        {/* Close the loop arrow */}
+        <div className="flex items-center gap-2 pl-7 pt-1">
+          <Link2 size={12} className="text-violet-400" />
+          <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest">
+            → back to {myStep?.user_id === userId ? 'you' : myStep?.username} · loop complete
+          </span>
+        </div>
+      </div>
+
+      {/* Accept button */}
+      <div className="px-5 pb-5">
+        {accepted ? (
+          <div className="w-full py-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-center text-xs font-black text-emerald-600">
+            ✓ You accepted — waiting for others
+          </div>
+        ) : (
+          <button
+            onClick={handleAccept}
+            disabled={accepting}
+            className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-violet-500/20 active:scale-[0.98] transition-all disabled:opacity-60"
+          >
+            {accepting ? 'Accepting…' : '🔗 Accept Chain'}
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// Chains View
+// ═══════════════════════════════════════════════════════════
+const ChainsView = ({ user, showToast }) => {
+  const [chains, setChains]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+
+  const fetchChains = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('find_trade_chains', { p_user_id: user.id });
+      if (rpcErr) throw rpcErr;
+      setChains(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('[CHAINS]', e);
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchChains(); }, [user]);
+
+  return (
+    <div className="w-full h-full flex flex-col bg-stone-50 overflow-y-auto scroll-container safe-area-bottom pb-32">
+      <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-stone-900 tracking-tight">Chain Matches</h2>
+          <p className="text-xs text-stone-400 font-medium mt-0.5">Multi-party circular swaps</p>
+        </div>
+        <button
+          onClick={fetchChains}
+          className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-500 hover:border-violet-300 hover:text-violet-500 transition-all"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="px-4">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="relative w-16 h-16">
+              <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+              <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+              <RefreshCw size={20} className="absolute inset-0 m-auto text-violet-500" />
+            </div>
+            <p className="text-xs font-black text-stone-400 uppercase tracking-widest">Scanning for chains…</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <p className="text-sm font-bold text-rose-500 mb-2">{error}</p>
+            <p className="text-xs text-stone-400">Run chain_engine.sql in Supabase first</p>
+          </div>
+        ) : chains.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-20 h-20 rounded-full bg-violet-50 flex items-center justify-center mb-5 relative">
+              <RefreshCw size={32} className="text-violet-300" />
+              <div className="absolute inset-0 rounded-full border-2 border-dashed border-violet-200 animate-spin" style={{ animationDuration: '4s' }} />
+            </div>
+            <h3 className="text-lg font-black text-stone-900 mb-2">No chains found yet</h3>
+            <p className="text-sm text-stone-400 max-w-[220px] font-medium">
+              Add items to your Wishlist on your profile so the engine can match circular trades.
+            </p>
+          </div>
+        ) : (
+          chains.map((chain, idx) => (
+            <ChainDiscoveryCard
+              key={idx}
+              chain={chain}
+              userId={user.id}
+              showToast={showToast}
+              onAccepted={fetchChains}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 export default function App() {
   const [cards, setCards] = useState([]);
   const [allItems, setAllItems] = useState([]);
@@ -1990,6 +2217,7 @@ export default function App() {
               </motion.div>
             )}
             {currentView === 'offers' && <motion.div key="offers" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full h-full flex flex-col"><IncomingOffersView user={user} showToast={showToast} setCurrentView={setCurrentView} setMatchData={setMatchData} /></motion.div>}
+            {currentView === 'chains' && <motion.div key="chains" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full h-full flex flex-col"><ChainsView user={user} showToast={showToast} /></motion.div>}
             {currentView === 'inventory' && <InventoryView key="inventory" user={user} showToast={showToast} onSignOut={handleSignOut} />}
             {currentView === 'chat' && <ChatView key="chat" user={user} matchData={matchData} setCurrentView={setCurrentView} showToast={showToast} />}
             {currentView === 'profile' && <ProfileView key="profile" user={user} onSignOut={handleSignOut} setCurrentView={setCurrentView} />}
@@ -1999,17 +2227,18 @@ export default function App() {
 
         {(!['chat', 'info'].includes(currentView)) && (
           <nav 
-            className="bg-white border-t border-gray-100 flex items-start justify-around px-4 z-50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]"
+            className="bg-white border-t border-gray-100 flex items-start justify-around px-2 z-50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]"
             style={{ 
               height: 'auto',
               paddingTop: '16px',
               paddingBottom: 'max(32px, env(safe-area-inset-bottom, 32px))' 
             }}
           >
-            <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><Zap size={22} className={currentView === 'swipe' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Explore</span></button>
-            <button onClick={() => setCurrentView('offers')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'offers' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><MessageCircle size={22} className={currentView === 'offers' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Offers</span></button>
-            <button onClick={() => setCurrentView('inventory')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'inventory' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><PackageOpen size={22} className={currentView === 'inventory' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">My Items</span></button>
-            <button onClick={() => setCurrentView('profile')} className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-500 w-16 h-16 rounded-3xl ${currentView === 'profile' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><User size={22} className={currentView === 'profile' ? 'fill-cyan-600' : ''} /><span className="text-[10px] font-black uppercase tracking-tighter">Profile</span></button>
+            <button onClick={() => setCurrentView('swipe')} className={`flex flex-col items-center justify-center gap-1 transition-all duration-500 w-14 h-14 rounded-3xl ${currentView === 'swipe' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><Zap size={20} className={currentView === 'swipe' ? 'fill-cyan-600' : ''} /><span className="text-[9px] font-black uppercase tracking-tighter">Explore</span></button>
+            <button onClick={() => setCurrentView('offers')} className={`flex flex-col items-center justify-center gap-1 transition-all duration-500 w-14 h-14 rounded-3xl ${currentView === 'offers' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><MessageCircle size={20} className={currentView === 'offers' ? 'fill-cyan-600' : ''} /><span className="text-[9px] font-black uppercase tracking-tighter">Offers</span></button>
+            <button onClick={() => setCurrentView('chains')} className={`flex flex-col items-center justify-center gap-1 transition-all duration-500 w-14 h-14 rounded-3xl ${currentView === 'chains' ? 'bg-violet-50 text-violet-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><RefreshCw size={20} className={currentView === 'chains' ? 'text-violet-600' : ''} /><span className="text-[9px] font-black uppercase tracking-tighter">Chains</span></button>
+            <button onClick={() => setCurrentView('inventory')} className={`flex flex-col items-center justify-center gap-1 transition-all duration-500 w-14 h-14 rounded-3xl ${currentView === 'inventory' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><PackageOpen size={20} className={currentView === 'inventory' ? 'fill-cyan-600' : ''} /><span className="text-[9px] font-black uppercase tracking-tighter">Items</span></button>
+            <button onClick={() => setCurrentView('profile')} className={`flex flex-col items-center justify-center gap-1 transition-all duration-500 w-14 h-14 rounded-3xl ${currentView === 'profile' ? 'bg-cyan-50 text-cyan-600 shadow-inner' : 'text-gray-300 hover:text-gray-500'}`}><User size={20} className={currentView === 'profile' ? 'fill-cyan-600' : ''} /><span className="text-[9px] font-black uppercase tracking-tighter">Profile</span></button>
           </nav>
         )}
 
