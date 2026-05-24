@@ -54,31 +54,40 @@ DECLARE
   v_sender TEXT;
   v_request_id BIGINT;
 BEGIN
-  -- Get config
-  SELECT value INTO v_api_key FROM public.email_config WHERE key = 'resend_api_key';
-  SELECT value INTO v_sender FROM public.email_config WHERE key = 'sender_email';
+  -- Get config (safely)
+  BEGIN
+    SELECT value INTO v_api_key FROM public.email_config WHERE key = 'resend_api_key';
+    SELECT value INTO v_sender FROM public.email_config WHERE key = 'sender_email';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[SwitchR Email] Config table missing: %', SQLERRM;
+    RETURN;
+  END;
   
   IF v_api_key IS NULL OR v_api_key = 'YOUR_RESEND_API_KEY' THEN
     RAISE NOTICE 'Email skipped: Resend API key not configured';
     RETURN;
   END IF;
 
-  -- Send via Resend API (async, non-blocking)
-  SELECT net.http_post(
-    url := 'https://api.resend.com/emails',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || v_api_key
-    ),
-    body := jsonb_build_object(
-      'from', v_sender,
-      'to', p_to,
-      'subject', p_subject,
-      'html', p_html
-    )
-  ) INTO v_request_id;
-  
-  RAISE NOTICE 'Email queued: % → % (request_id: %)', p_subject, p_to, v_request_id;
+  -- Send via Resend API (async, non-blocking) — wrapped in exception handler
+  BEGIN
+    SELECT net.http_post(
+      url := 'https://api.resend.com/emails',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || v_api_key
+      ),
+      body := jsonb_build_object(
+        'from', v_sender,
+        'to', p_to,
+        'subject', p_subject,
+        'html', p_html
+      )
+    ) INTO v_request_id;
+    
+    RAISE NOTICE 'Email queued: % → % (request_id: %)', p_subject, p_to, v_request_id;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[SwitchR Email] Failed to queue email to %: %', p_to, SQLERRM;
+  END;
 END;
 $$;
 
@@ -207,7 +216,11 @@ BEGIN
     'https://switchr.app'
   );
 
-  PERFORM private_send_email(v_email, 'Welcome to SwitchR! 🎉 Start trading today', v_html);
+  BEGIN
+    PERFORM private_send_email(v_email, 'Welcome to SwitchR! 🎉 Start trading today', v_html);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[SwitchR Email] Welcome email failed for %: %', v_email, SQLERRM;
+  END;
   RETURN NEW;
 END;
 $$;
@@ -273,7 +286,11 @@ BEGIN
     'https://switchr.app'
   );
 
-  PERFORM private_send_email(v_receiver_email, '🤝 ' || COALESCE(v_bidder_name, 'Someone') || ' wants to swap with you!', v_html);
+  BEGIN
+    PERFORM private_send_email(v_receiver_email, '🤝 ' || COALESCE(v_bidder_name, 'Someone') || ' wants to swap with you!', v_html);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[SwitchR Email] Offer notification failed: %', SQLERRM;
+  END;
   RETURN NEW;
 END;
 $$;
@@ -337,7 +354,11 @@ BEGIN
     'https://switchr.app'
   );
 
-  PERFORM private_send_email(v_bidder_email, v_subject, v_html);
+  BEGIN
+    PERFORM private_send_email(v_bidder_email, v_subject, v_html);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[SwitchR Email] Status change notification failed: %', SQLERRM;
+  END;
   RETURN NEW;
 END;
 $$;
@@ -387,7 +408,11 @@ BEGIN
     'https://switchr.app'
   );
 
-  PERFORM private_send_email(v_receiver_email, '💬 New message from ' || COALESCE(v_sender_name, 'someone'), v_html);
+  BEGIN
+    PERFORM private_send_email(v_receiver_email, '💬 New message from ' || COALESCE(v_sender_name, 'someone'), v_html);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[SwitchR Email] Message notification failed: %', SQLERRM;
+  END;
   RETURN NEW;
 END;
 $$;
@@ -439,7 +464,11 @@ BEGIN
       'https://switchr.app'
     );
 
-    PERFORM private_send_email(v_email, '🔗 ' || v_chain_size || '-way chain trade found!', v_html);
+    BEGIN
+      PERFORM private_send_email(v_email, '🔗 ' || v_chain_size || '-way chain trade found!', v_html);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING '[SwitchR Email] Chain proposal notification failed for %: %', v_email, SQLERRM;
+    END;
   END LOOP;
 
   RETURN NEW;
@@ -499,7 +528,11 @@ BEGIN
       'https://switchr.app'
     );
 
-    PERFORM private_send_email(v_email, '🎉 Chain trade confirmed — all ' || v_chain_size || ' traders are in!', v_html);
+    BEGIN
+      PERFORM private_send_email(v_email, '🎉 Chain trade confirmed — all ' || v_chain_size || ' traders are in!', v_html);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING '[SwitchR Email] Chain accepted notification failed for %: %', v_email, SQLERRM;
+    END;
   END LOOP;
 
   RETURN NEW;

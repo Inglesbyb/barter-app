@@ -284,3 +284,10 @@ export function searchTaxonomy(query, limit = 10) {
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
+
+// CO2 lookup helper — resolves a (category, subCategory) pair to kg saved
+export const getCO2 = (category, subCategory) => {
+  const entry = TAXONOMY.find(t => t.category === category && t.label === subCategory);
+  if (entry) return entry.co2;
+  return CATEGORY_FALLBACK_CO2[category] || null;
+};
