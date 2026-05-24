@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
-import { Zap, X, MapPin, ChevronDown, Tag, Leaf, Search } from 'lucide-react';
+import { Zap, X, MapPin, ChevronDown, Tag, Leaf, Search, Crown } from 'lucide-react';
 
 const Card = ({ item, active, removeCard, onSwap, onTap }) => {
   const x = useMotionValue(0);
@@ -36,9 +36,23 @@ const Card = ({ item, active, removeCard, onSwap, onTap }) => {
       className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing swipe-card-container px-4 py-6"
       onTap={() => { if (Math.abs(x.get()) < 5) onTap?.(item); }}
     >
-      <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 bg-white">
+      {/* Pro seller gold glow ring outside the card */}
+      {item.profiles?.is_pro && (
+        <div className="absolute inset-3 rounded-[2.5rem] bg-gradient-to-br from-amber-400/60 via-orange-300/40 to-yellow-400/60 blur-md pointer-events-none" />
+      )}
+      <div className={`relative w-full h-full rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-white ${
+        item.profiles?.is_pro ? 'border-2 border-amber-400/70' : 'border border-gray-100'
+      }`}>
         <img src={item.image_url} className="w-full h-full object-cover select-none pointer-events-none" alt={item.title} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent pointer-events-none" />
+
+        {/* Pro seller badge */}
+        {item.profiles?.is_pro && (
+          <div className="absolute top-5 left-5 z-20 flex items-center gap-1.5 bg-amber-400/90 backdrop-blur-sm text-stone-900 text-[9px] font-black px-2.5 py-1.5 rounded-full shadow-lg border border-amber-300/50">
+            <Crown size={10} className="shrink-0" />
+            PRO SELLER
+          </div>
+        )}
         
         {/* Indicators */}
         <motion.div style={{ scale: heartScale }} className="absolute top-10 right-10 z-20 bg-cyan-500 p-4 rounded-full text-white shadow-xl pointer-events-none">
