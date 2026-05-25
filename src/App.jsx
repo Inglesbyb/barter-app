@@ -18,6 +18,7 @@ import AuthView from './components/AuthView';
 import TermsModal from './components/TermsModal';
 import ChainsView from './components/ChainsView';
 import DiagnosticOverlay from './components/DiagnosticOverlay';
+import ResetPasswordModal from './components/ResetPasswordModal';
 
 // ── Utilities kept in App scope ──────────────────────────────
 const googleMapsLibraries = ['places', 'geometry'];
@@ -75,6 +76,7 @@ export default function App() {
   const [showDiag, setShowDiag] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [pendingOfferCount, setPendingOfferCount] = useState(0);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
   // ── Stable callback refs (prevent child re-renders) ────────
@@ -134,6 +136,20 @@ export default function App() {
       }
     };
 
+    // ── Detect expired/invalid reset links from URL hash ──────
+    const hash = window.location.hash;
+    if (hash && hash.includes('error=access_denied')) {
+      const params = new URLSearchParams(hash.replace('#', ''));
+      const errorCode = params.get('error_code');
+      if (errorCode === 'otp_expired') {
+        setTimeout(() => showToast('That reset link has expired. Please request a new one.', 'error'), 500);
+      } else {
+        setTimeout(() => showToast('Invalid link. Please request a new password reset.', 'error'), 500);
+      }
+      // Clean the URL so the error hash doesn't persist
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (controller.signal.aborted) return;
       setUser(session?.user ?? null);
@@ -141,9 +157,12 @@ export default function App() {
       if (session?.user) checkTerms(session.user.id);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (controller.signal.aborted) return;
       setUser(session?.user ?? null);
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowResetPasswordModal(true);
+      }
       if (session?.user) checkTerms(session.user.id);
     });
 
@@ -513,6 +532,7 @@ export default function App() {
             </motion.div>
           )}
           {showTermsModal && <TermsModal onAccept={async () => { await supabase.from('profiles').update({ accepted_terms: true }).eq('id', user.id); setShowTermsModal(false); }} />}
+          {showResetPasswordModal && <ResetPasswordModal onClose={() => setShowResetPasswordModal(false)} showToast={showToast} />}
           {showDiag && <DiagnosticOverlay onClose={() => setShowDiag(false)} />}
         </AnimatePresence>
 

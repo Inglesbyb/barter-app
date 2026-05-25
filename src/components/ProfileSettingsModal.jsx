@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Upload, User } from 'lucide-react';
+import { X, Upload, User, KeyRound, MailCheck } from 'lucide-react';
 import { supabase } from '../supabase';
 
 const ProfileSettingsModal = ({ user, profile, onClose, onSaved, showToast }) => {
@@ -8,7 +8,9 @@ const ProfileSettingsModal = ({ user, profile, onClose, onSaved, showToast }) =>
   const [bio, setBio]             = useState(profile?.bio || '');
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(profile?.avatar_url || null);
-  const [saving, setSaving]       = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [resetSending, setResetSending] = useState(false);
+  const [resetSent, setResetSent]   = useState(false);
 
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
@@ -123,6 +125,37 @@ const ProfileSettingsModal = ({ user, profile, onClose, onSaved, showToast }) =>
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
+
+          {/* Change Password */}
+          <div className="border-t border-gray-100 pt-5">
+            <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Password</p>
+            {resetSent ? (
+              <div className="flex items-center gap-3 p-4 bg-cyan-50 border border-cyan-100 rounded-2xl">
+                <MailCheck size={18} className="text-cyan-500 shrink-0" />
+                <div>
+                  <p className="text-xs font-black text-cyan-700">Reset link sent!</p>
+                  <p className="text-[11px] text-cyan-600 font-medium mt-0.5">Check your email inbox to set a new password.</p>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={resetSending}
+                onClick={async () => {
+                  setResetSending(true);
+                  await supabase.auth.resetPasswordForEmail(user.email, {
+                    redirectTo: window.location.origin,
+                  });
+                  setResetSending(false);
+                  setResetSent(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3.5 bg-gray-50 border border-gray-200 text-gray-700 font-black text-sm rounded-2xl hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-60"
+              >
+                <KeyRound size={15} />
+                {resetSending ? 'Sending...' : 'Send Password Reset Email'}
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     </div>
