@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Loader2, Star, ImageOff, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 export function Spinner({ className = '' }) {
@@ -60,14 +61,15 @@ export function RatingInline({ stats }) {
 }
 
 export function ItemImage({ src, alt, className = '' }) {
-  if (!src) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
     return (
       <div className={`flex items-center justify-center bg-linear-to-br from-brand-soft to-coral-soft ${className}`}>
         <ImageOff className="text-brand/40" size={28} />
       </div>
     );
   }
-  return <img src={src} alt={alt} loading="lazy" className={`object-cover ${className}`} />;
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`object-cover ${className}`} />;
 }
 
 const STATUS_STYLES = {

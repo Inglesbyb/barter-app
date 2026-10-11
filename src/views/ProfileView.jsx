@@ -8,7 +8,7 @@ import Modal from '../components/Modal';
 import { Avatar, BackButton, EmptyState, ErrorBox, PageLoader, Spinner, Stars } from '../components/ui';
 
 export default function ProfileView({ userId }) {
-  const { session, showToast } = useApp();
+  const { session, showToast, setProfile } = useApp();
   const currentUserId = session.user.id;
   const targetId = userId || currentUserId;
   const isMine = targetId === currentUserId;
@@ -242,8 +242,9 @@ export default function ProfileView({ userId }) {
           open={editOpen}
           onClose={() => setEditOpen(false)}
           profile={profile}
-          onSaved={() => {
+          onSaved={(updated) => {
             setEditOpen(false);
+            if (updated) setProfile((prev) => ({ ...prev, ...updated }));
             showToast('Profile updated!');
             reload();
           }}
@@ -266,17 +267,18 @@ function EditProfileModal({ open, onClose, profile, onSaved }) {
     setError('');
 
     try {
+      const payload = {
+        username: username.trim(),
+        location_name: locationName.trim() || null,
+        bio: bio.trim() || null,
+      };
       unwrap(
         await supabase
           .from('profiles')
-          .update({
-            username: username.trim(),
-            location_name: locationName.trim() || null,
-            bio: bio.trim() || null,
-          })
+          .update(payload)
           .eq('id', profile.id),
       );
-      onSaved();
+      onSaved(payload);
     } catch (err) {
       setError(errorMessage(err));
     } finally {

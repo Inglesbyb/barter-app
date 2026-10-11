@@ -22,11 +22,11 @@ export default function FeedView() {
         .from('items')
         .select(ITEM_SELECT)
         .eq('status', 'available')
-        .neq('user_id', session.user.id)
+        .neq('user_id', session?.user?.id || '')
         .order('created_at', { ascending: false })
         .limit(200),
     );
-  }, []);
+  }, [session?.user?.id]);
 
   const items = (allItems || []).filter((item) => {
     if (category !== 'All' && item.category !== category) return false;
@@ -56,7 +56,7 @@ export default function FeedView() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search items…"
+          placeholder="Search items, categories, or locations (e.g. Manchester, Camden)…"
           className="field rounded-2xl py-3.5 pl-11 pr-10 text-base shadow-card"
         />
         {search && (
@@ -72,7 +72,7 @@ export default function FeedView() {
       </div>
 
       {/* Categories */}
-      <div className="no-scrollbar -mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
         {['All', ...CATEGORIES].map((c) => (
           <button
             key={c}
@@ -85,6 +85,27 @@ export default function FeedView() {
           </button>
         ))}
       </div>
+
+      {/* Filter status indicator */}
+      {!loading && !error && (debounced || category !== 'All') && (
+        <div className="mb-5 flex items-center justify-between text-xs text-muted">
+          <span>
+            Found <strong className="text-ink">{items.length}</strong> {items.length === 1 ? 'item' : 'items'}
+            {debounced ? ` for "${debounced}"` : ''}
+            {category !== 'All' ? ` in ${category}` : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setCategory('All');
+            }}
+            className="font-medium text-brand hover:underline"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <PageLoader />

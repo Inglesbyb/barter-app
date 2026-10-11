@@ -88,16 +88,16 @@ export default function ItemDetailView({ itemId }) {
           <button
             type="button"
             id="item-owner-link"
-            onClick={() => navigate(`/profile/${item.owner.id}`)}
+            onClick={() => item.owner?.id && navigate(`/profile/${item.owner.id}`)}
             className="card mt-6 flex items-center gap-3 p-4 text-left transition hover:shadow-lift"
           >
-            <Avatar name={item.owner.username} size={44} />
+            <Avatar name={item.owner?.username || 'Trader'} size={44} />
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">{isMine ? 'You' : `@${item.owner.username}`}</p>
+              <p className="font-semibold">{isMine ? 'You' : `@${item.owner?.username || 'trader'}`}</p>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <RatingInline stats={stats} />
                 <span className="text-xs text-muted">{stats.tradesCompleted} trades</span>
-                {item.owner.location_name && (
+                {item.owner?.location_name && (
                   <span className="flex items-center gap-0.5 text-xs text-muted">
                     <MapPin size={11} /> {item.owner.location_name}
                   </span>

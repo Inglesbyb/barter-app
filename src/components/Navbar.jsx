@@ -116,7 +116,7 @@ export default function Navbar({ currentPath }) {
                 isCurrent('/me') ? 'bg-brand-soft ring-2 ring-brand/30' : ''
               }`}
             >
-              <Avatar name={profile?.username || session.user.email} size={32} />
+              <Avatar name={profile?.username || session?.user?.email || 'me'} size={32} />
             </button>
           </nav>
         </div>
