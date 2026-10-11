@@ -57,6 +57,7 @@ export function useQuery(fetcher, deps = []) {
 
   useEffect(() => {
     let cancelled = false;
+    setState((prev) => ({ ...prev, loading: true }));
     fetcher()
       .then((data) => !cancelled && setState({ data, error: null, loading: false }))
       .catch((error) => !cancelled && setState({ data: null, error, loading: false }));

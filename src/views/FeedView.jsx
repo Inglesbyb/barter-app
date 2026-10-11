@@ -32,7 +32,6 @@ export default function FeedView() {
   }, [category, session?.user?.id]);
 
   const items = (allItems || []).filter((item) => {
-    if (category !== 'All' && item.category !== category) return false;
     if (!debounced) return true;
     const term = debounced.toLowerCase();
     const titleMatch = item.title?.toLowerCase().includes(term);

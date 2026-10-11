@@ -43,6 +43,7 @@ export default function TradesView({ initialTab = 'received' }) {
   // Group incoming offers by which of MY items they're for.
   const groups = Object.values(
     received.reduce((acc, t) => {
+      if (!t.requested) return acc;
       const key = t.requested_item_id;
       acc[key] ??= { item: t.requested, offers: [] };
       acc[key].offers.push(t);

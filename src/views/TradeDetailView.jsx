@@ -254,11 +254,20 @@ function TradeRoom({ initial, reload }) {
 
 function SwapItem({ label, item }) {
   return (
-    <button type="button" onClick={() => navigate(`/item/${item.id}`)} className="group min-w-0 text-left">
+    <button
+      type="button"
+      onClick={() => item?.id && navigate(`/item/${item.id}`)}
+      className="group min-w-0 text-left"
+      disabled={!item?.id}
+    >
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
-      <ItemImage src={item.image_url} alt={item.title} className="aspect-square w-full rounded-xl transition group-hover:opacity-90" />
-      <p className="mt-1.5 truncate text-sm font-semibold">{item.title}</p>
-      <p className="text-xs text-muted">{item.condition}</p>
+      <ItemImage
+        src={item?.image_url}
+        alt={item?.title || 'Item'}
+        className="aspect-square w-full rounded-xl transition group-hover:opacity-90"
+      />
+      <p className="mt-1.5 truncate text-sm font-semibold">{item?.title || 'Item'}</p>
+      <p className="text-xs text-muted">{item?.condition || ''}</p>
     </button>
   );
 }
