@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.email_config (
 -- Insert your Resend API key and sender email
 -- ⚠️ REPLACE THESE VALUES before running!
 INSERT INTO public.email_config (key, value) VALUES
-  ('resend_api_key', 're_b2naQRQ9_BEwRVnG7sej291Qz6tNMkLm8'),
+  ('resend_api_key', 're_PLACEHOLDER_KEY_REDACTED'),
   ('sender_email', 'onboarding@resend.dev'),
   ('app_name', 'SwitchR'),
   ('app_url', 'https://switchr.app')
