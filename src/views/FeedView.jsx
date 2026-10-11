@@ -16,21 +16,28 @@ export default function FeedView() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: items, loading, error, reload } = useQuery(async () => {
-    let q = supabase
-      .from('items')
-      .select(ITEM_SELECT)
-      .eq('status', 'available')
-      .neq('user_id', session.user.id)
-      .order('created_at', { ascending: false })
-      .limit(60);
-    if (category !== 'All') q = q.eq('category', category);
-    if (debounced) {
-      const term = debounced.replace(/[%,()"\\]/g, ' ');
-      q = q.or(`title.ilike."%${term}%",description.ilike."%${term}%"`);
-    }
-    return unwrap(await q);
-  }, [debounced, category]);
+  const { data: allItems, loading, error, reload } = useQuery(async () => {
+    return unwrap(
+      await supabase
+        .from('items')
+        .select(ITEM_SELECT)
+        .eq('status', 'available')
+        .neq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(200),
+    );
+  }, []);
+
+  const items = (allItems || []).filter((item) => {
+    if (category !== 'All' && item.category !== category) return false;
+    if (!debounced) return true;
+    const term = debounced.toLowerCase();
+    const titleMatch = item.title?.toLowerCase().includes(term);
+    const descMatch = item.description?.toLowerCase().includes(term);
+    const locMatch = item.owner?.location_name?.toLowerCase().includes(term);
+    const userMatch = item.owner?.username?.toLowerCase().includes(term);
+    return titleMatch || descMatch || locMatch || userMatch;
+  });
 
   return (
     <div>
