@@ -14,6 +14,22 @@
 --     direct UPDATE policy on trades, so nobody can forge a status.
 -- ==============================================================================
 
+-- ------------------------------------------------------------------------------
+-- 0. CLEAN RESET: Drop legacy tables and triggers if resetting an existing project
+-- ------------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+
+DROP TABLE IF EXISTS public.reviews CASCADE;
+DROP TABLE IF EXISTS public.ratings CASCADE;
+DROP TABLE IF EXISTS public.messages CASCADE;
+DROP TABLE IF EXISTS public.trades CASCADE;
+DROP TABLE IF EXISTS public.bids CASCADE;
+DROP TABLE IF EXISTS public.swipes CASCADE;
+DROP TABLE IF EXISTS public.chain_proposals CASCADE;
+DROP TABLE IF EXISTS public.email_config CASCADE;
+DROP TABLE IF EXISTS public.items CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
 
 -- ------------------------------------------------------------------------------
 -- 1. PROFILES
