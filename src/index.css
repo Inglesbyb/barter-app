@@ -1,66 +1,121 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #ec4899;
-  --color-primary-dark: #be185d;
-  --color-secondary: #8b5cf6;
-  --color-danger: #ef4444;
-  --color-success: #10b981;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Outfit", "Inter", system-ui, sans-serif;
+
+  --color-ink: #16152b;
+  --color-ink-soft: #4a4866;
+  --color-muted: #8a88a3;
+  --color-line: #e8e6f2;
+  --color-canvas: #f6f5fb;
+
+  --color-brand: #5b3df5;
+  --color-brand-dark: #4327d6;
+  --color-brand-soft: #ece8ff;
+  --color-coral: #ff5c8a;
+  --color-coral-soft: #ffe8ef;
+
+  --color-ok: #12b886;
+  --color-ok-soft: #e3f8f1;
+  --color-warn: #f59f00;
+  --color-warn-soft: #fff4db;
+  --color-bad: #e5484d;
+  --color-bad-soft: #fdeaea;
+
+  --shadow-card: 0 1px 2px rgb(22 21 43 / 0.04), 0 8px 24px -12px rgb(22 21 43 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(22 21 43 / 0.06), 0 18px 40px -16px rgb(91 61 245 / 0.35);
 }
 
-html, body {
-  overscroll-behavior: none;
-  height: 100dvh;
-  min-height: 100dvh;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
+html,
+body,
 #root {
-  height: 100%;
-  width: 100%;
-  position: relative;
-  overflow: visible;
+  min-height: 100dvh;
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #f9fafb;
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgb(91 61 245 / 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(255 92 138 / 0.07), transparent 60%),
+    var(--color-canvas);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
 
-/* Smooth "Rubber-band" Scroll for Mobile */
-.scroll-container {
-  overflow-y: auto !important;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none;  /* IE and Edge */
-  height: 100%;
+/* ---- Reusable component utilities (Tailwind v4 @utility so they compose) ---- */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+    transition-all duration-150 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40;
 }
 
-.scroll-container::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
+@utility btn-primary {
+  @apply btn text-white shadow-lift;
+  background-image: linear-gradient(135deg, var(--color-brand) 0%, #7b4dff 55%, var(--color-coral) 140%);
+  &:hover {
+    filter: brightness(1.06);
+  }
 }
 
-/* Allow vertical scroll on cards while horizontal swipe is active */
-.swipe-card-container {
-  touch-action: pan-y !important;
+@utility btn-secondary {
+  @apply btn border border-line bg-white text-ink hover:border-brand/40 hover:bg-brand-soft/40;
 }
 
-/* Safe area padding for bottom navigation */
-.safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 100px);
+@utility btn-ghost {
+  @apply btn text-ink-soft hover:bg-ink/5;
 }
 
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+@utility btn-danger {
+  @apply btn border border-bad/20 bg-bad-soft text-bad hover:bg-bad hover:text-white;
 }
 
-.animate-spin-slow {
-  animation: spin-slow 12s linear infinite;
+@utility card {
+  @apply rounded-2xl border border-line/70 bg-white shadow-card;
 }
 
+@utility field {
+  @apply w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted
+    transition focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10;
+}
 
+@utility label {
+  @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-soft;
+}
+
+@utility chip {
+  @apply inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition;
+}
+
+@utility chip-off {
+  @apply chip border-line bg-white text-ink-soft hover:border-brand/40 hover:text-ink;
+}
+
+@utility chip-on {
+  @apply chip border-brand bg-brand text-white shadow-lift;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+
+@utility text-gradient {
+  background-image: linear-gradient(120deg, var(--color-brand), var(--color-coral));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}
