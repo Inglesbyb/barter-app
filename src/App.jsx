@@ -391,25 +391,153 @@ const IncomingOffersView = ({ user, showToast, setCurrentView, setMatchData }) =
   );
 };
 
-const ProfileView = ({ user, onSignOut, setCurrentView }) => {
+const ProfileSettingsModal = ({ user, profile, onClose, onSaved, showToast }) => {
+  const [username, setUsername]   = useState(profile?.username || '');
+  const [bio, setBio]             = useState(profile?.bio || '');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(profile?.avatar_url || null);
+  const [saving, setSaving]       = useState(false);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      let avatar_url = profile?.avatar_url || null;
+
+      if (avatarFile) {
+        const ext  = avatarFile.name.split('.').pop();
+        const path = `${user.id}/avatar.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from('avatars')
+          .upload(path, avatarFile, { upsert: true });
+        if (upErr) throw upErr;
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+        avatar_url = urlData.publicUrl + '?t=' + Date.now(); // cache-bust
+      }
+
+      const { error } = await supabase.from('profiles').update({
+        username: username.trim() || profile?.username,
+        bio:      bio.trim(),
+        avatar_url,
+      }).eq('id', user.id);
+
+      if (error) throw error;
+      showToast('Profile saved! ✨', 'success');
+      onSaved();
+      onClose();
+    } catch (err) {
+      showToast('Failed to save: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[400] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        className="w-full max-w-md bg-white rounded-t-[2.5rem] overflow-hidden max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mt-4 mb-1 shrink-0" />
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+          <h3 className="text-lg font-black text-gray-900 tracking-tight">Edit Profile</h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-8">
+          {/* Avatar upload */}
+          <div className="flex flex-col items-center gap-3">
+            <label className="relative cursor-pointer group">
+              <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-gray-100 shadow-lg bg-gray-200">
+                {avatarPreview ? (
+                  <img src={avatarPreview} className="w-full h-full object-cover" alt="avatar" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-400 to-blue-500">
+                    <User size={32} className="text-white" />
+                  </div>
+                )}
+              </div>
+              <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Upload size={20} className="text-white" />
+              </div>
+              <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+            </label>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tap to change photo</span>
+          </div>
+
+          {/* Username */}
+          <div>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Your display name"
+              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 font-bold text-gray-900"
+            />
+          </div>
+
+          {/* Bio */}
+          <div>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">Bio</label>
+            <textarea
+              value={bio}
+              onChange={e => setBio(e.target.value)}
+              placeholder="Tell traders a bit about yourself..."
+              rows={3}
+              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 resize-none font-medium text-gray-700"
+            />
+          </div>
+
+          {/* Save */}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black rounded-2xl shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-70"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const ProfileView = ({ user, onSignOut, setCurrentView, showToast }) => {
   const [profile, setProfile]     = useState(null);
   const [items, setItems]         = useState([]);
   const [reviews, setReviews]     = useState([]);
   const [activeTab, setActiveTab] = useState('inventory');
   const [loading, setLoading]     = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const load = async () => {
+    const [{ data: p }, { data: it }, { data: rv }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+      supabase.from('items').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('reviews').select('*, reviewer:reviewer_id(username, avatar_url)').eq('profile_id', user.id).order('created_at', { ascending: false }),
+    ]);
+    setProfile(p);
+    setItems(it || []);
+    setReviews(rv || []);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      const [{ data: p }, { data: it }, { data: rv }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-        supabase.from('items').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('reviews').select('*, reviewer:reviewer_id(username, avatar_url)').eq('profile_id', user.id).order('created_at', { ascending: false }),
-      ]);
-      setProfile(p);
-      setItems(it || []);
-      setReviews(rv || []);
-      setLoading(false);
-    };
     load();
   }, [user]);
 
@@ -455,7 +583,7 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
           <button
-            onClick={() => setCurrentView('info')}
+            onClick={() => setShowSettings(true)}
             className="absolute top-4 right-4 p-2 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/20 transition-all"
           >
             <Settings size={18} />
@@ -542,9 +670,9 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
         <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-3">Trust Score</p>
         <div className="space-y-2.5">
           {[
-            { label: 'Email Verified',  done: vLevel >= 1, icon: <CheckCircle2 size={14} /> },
-            { label: 'Phone Verified',  done: vLevel >= 2, icon: <CheckCircle2 size={14} /> },
-            { label: 'ID Verified',     done: vLevel >= 3, icon: <CheckCircle2 size={14} /> },
+            { label: 'Email Verified',  done: profile?.email_verified  ?? (vLevel >= 1), icon: <CheckCircle2 size={14} /> },
+            { label: 'Phone Verified',  done: profile?.phone_verified  ?? (vLevel >= 2), icon: <CheckCircle2 size={14} /> },
+            { label: 'ID Verified',     done: profile?.id_verified     ?? (vLevel >= 3), icon: <CheckCircle2 size={14} /> },
           ].map(t => (
             <div key={t.label} className="flex items-center gap-3">
               <span className={`shrink-0 ${t.done ? 'text-emerald-500' : 'text-stone-200'}`}>{t.icon}</span>
@@ -665,6 +793,16 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
 
       {/* ── Footer actions ────────────────────────────── */}
       <div className="px-4 pb-6 space-y-3 mt-2">
+        <button onClick={() => setShowSettings(true)} className="w-full flex items-center justify-between p-5 bg-white rounded-2xl border border-stone-100 shadow-sm hover:border-cyan-200 transition-all group">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-cyan-50 text-cyan-500 flex items-center justify-center"><Settings size={20} /></div>
+            <div className="text-left">
+              <span className="font-black text-stone-900 text-sm block">Edit Profile</span>
+              <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Change photo, name & bio</span>
+            </div>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all" />
+        </button>
         <button onClick={() => setCurrentView('info')} className="w-full flex items-center justify-between p-5 bg-white rounded-2xl border border-stone-100 shadow-sm hover:border-cyan-200 transition-all group">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-cyan-50 text-cyan-500 flex items-center justify-center"><HelpCircle size={20} /></div>
@@ -676,12 +814,25 @@ const ProfileView = ({ user, onSignOut, setCurrentView }) => {
           <ChevronRight size={18} className="text-stone-300 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all" />
         </button>
       </div>
+
+      <AnimatePresence>
+        {showSettings && (
+          <ProfileSettingsModal
+            user={user}
+            profile={profile}
+            onClose={() => setShowSettings(false)}
+            onSaved={load}
+            showToast={showToast || (() => {})}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 
 const InfoView = ({ onBack }) => {
+
   const [expanded, setExpanded] = useState('swap');
 
   const sections = [
@@ -2174,25 +2325,46 @@ export default function App() {
       console.log("🧪 [DISCOVERY] Running distance filter on", allItems.length, "items...");
       
       const itemsWithDistance = allItems.map(item => {
-        if (!userLocation || item.lat === null || item.lng === null) {
+        if (!userLocation || item.lat === null || item.lat === undefined || item.lng === null || item.lng === undefined) {
           return { ...item, calculatedDistance: null };
         }
         const dist = calculateDistance(userLocation.lat, userLocation.lng, item.lat, item.lng);
         return { ...item, calculatedDistance: dist };
       });
 
-      let filtered = itemsWithDistance.filter(item => {
-        if (!userLocation || item.calculatedDistance === null) return true;
-        return item.calculatedDistance <= radius;
-      });
-
-      console.log(`📊 [DISCOVERY] Found ${filtered.length} items within ${radius}km.`);
-
-      // Fallback: If no items found in radius, show all available items
-      if (filtered.length === 0 && allItems.length > 0) {
-        console.log("💡 [DISCOVERY] No items in radius. Activating Fallback Mode.");
+      let filtered;
+      
+      if (userLocation) {
+        // When user has a location set, apply strict geo filtering:
+        // - Items WITH coordinates: must be within radius
+        // - Items WITHOUT coordinates: excluded (they didn't set a location)
+        const geoItems = itemsWithDistance.filter(item => item.calculatedDistance !== null);
+        const nullGeoItems = itemsWithDistance.filter(item => item.calculatedDistance === null);
+        
+        const withinRadius = geoItems.filter(item => item.calculatedDistance <= radius);
+        
+        console.log(`📊 [DISCOVERY] ${geoItems.length} items have coordinates, ${nullGeoItems.length} items have no coordinates.`);
+        console.log(`📊 [DISCOVERY] ${withinRadius.length} items within ${radius}km radius.`);
+        
+        if (withinRadius.length > 0) {
+          // Good — we have items within the radius, use only those
+          filtered = withinRadius;
+        } else if (geoItems.length > 0) {
+          // No items in radius but some have coordinates — show nearest ones
+          console.log("💡 [DISCOVERY] No items within radius. Showing all geotagged items as fallback.");
+          filtered = geoItems;
+        } else {
+          // No items have coordinates at all — show everything as last resort
+          console.log("💡 [DISCOVERY] No geotagged items exist. Showing all items (no geo filter possible).");
+          filtered = itemsWithDistance;
+        }
+      } else {
+        // No user location set — skip geo filtering entirely, show everything
+        console.log("📊 [DISCOVERY] No user location set — showing all items unfiltered.");
         filtered = itemsWithDistance;
       }
+
+      console.log(`✅ [DISCOVERY] Final card count: ${filtered.length}`);
 
       // Discovery Mode: shuffle the final set so every session feels fresh
       setCards(isDiscoveryMode ? shuffleArray(filtered) : filtered);
@@ -2201,6 +2373,7 @@ export default function App() {
       setCards([]);
     }
   }, [allItems, radius, userLocation, isDiscoveryMode]);
+
 
   const geocodeLocation = async (query) => {
     if (!query.trim() || !window.google) return;
@@ -2434,7 +2607,7 @@ export default function App() {
             {currentView === 'chains' && <motion.div key="chains" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full h-full flex flex-col"><ChainsView user={user} showToast={showToast} /></motion.div>}
             {currentView === 'inventory' && <InventoryView key="inventory" user={user} showToast={showToast} onSignOut={handleSignOut} />}
             {currentView === 'chat' && <ChatView key="chat" user={user} matchData={matchData} setCurrentView={setCurrentView} showToast={showToast} />}
-            {currentView === 'profile' && <ProfileView key="profile" user={user} onSignOut={handleSignOut} setCurrentView={setCurrentView} />}
+            {currentView === 'profile' && <ProfileView key="profile" user={user} onSignOut={handleSignOut} setCurrentView={setCurrentView} showToast={showToast} />}
             {currentView === 'info' && <InfoView key="info" onBack={() => setCurrentView('profile')} user={user} showToast={showToast} />}
           </AnimatePresence>
         </main>
