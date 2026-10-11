@@ -3,11 +3,12 @@ import { motion } from 'framer-motion';
 import { ArrowRightLeft, MapPin, Trash2, Inbox, Clock } from 'lucide-react';
 import { supabase, unwrap, ITEM_SELECT, getProfileStats } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
+import { calculateDistance } from '../lib/geo';
 import TradeOfferModal from '../components/TradeOfferModal';
 import { Avatar, BackButton, ErrorBox, ItemImage, PageLoader, RatingInline, StatusBadge } from '../components/ui';
 
 export default function ItemDetailView({ itemId }) {
-  const { session, showToast } = useApp();
+  const { session, profile, showToast } = useApp();
   const me = session.user.id;
   const [offerOpen, setOfferOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -99,7 +100,15 @@ export default function ItemDetailView({ itemId }) {
                 <span className="text-xs text-muted">{stats.tradesCompleted} trades</span>
                 {item.owner?.location_name && (
                   <span className="flex items-center gap-0.5 text-xs text-muted">
-                    <MapPin size={11} /> {item.owner.location_name}
+                    <MapPin size={11} className={item.owner?.lat != null ? 'text-brand' : ''} />
+                    {profile?.lat != null && item.owner?.lat != null
+                      ? `${
+                          calculateDistance(profile.lat, profile.lng, item.owner.lat, item.owner.lng) < 1
+                            ? '<1 km away'
+                            : Math.round(calculateDistance(profile.lat, profile.lng, item.owner.lat, item.owner.lng)) + ' km away'
+                        } · `
+                      : ''}
+                    {item.owner.location_name}
                   </span>
                 )}
               </div>

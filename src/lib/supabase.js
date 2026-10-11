@@ -23,7 +23,7 @@ export const TRADE_SELECT = `
   receiver:profiles!trades_receiver_id_fkey(id, username)
 `;
 
-export const ITEM_SELECT = '*, owner:profiles(id, username, location_name)';
+export const ITEM_SELECT = '*, owner:profiles(id, username, location_name, lat, lng)';
 
 export async function uploadItemImage(userId, file) {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();

@@ -34,8 +34,11 @@ export default function ItemCard({ item, showStatus = false, index = 0 }) {
           <span className="truncate">{item.category}</span>
           {item.owner?.location_name && (
             <span className="flex min-w-0 items-center gap-0.5 truncate">
-              <MapPin size={11} className="shrink-0" />
-              <span className="truncate">{item.owner.location_name}</span>
+              <MapPin size={11} className={`shrink-0 ${item.distance != null ? 'text-brand' : ''}`} />
+              <span className="truncate">
+                {item.distance != null ? `${item.distance < 1 ? '<1 km' : Math.round(item.distance) + ' km'} · ` : ''}
+                {item.owner.location_name}
+              </span>
             </span>
           )}
         </div>

@@ -1,15 +1,79 @@
 import { useEffect, useState } from 'react';
-import { Search, PackageSearch, Plus, X } from 'lucide-react';
+import { Search, PackageSearch, Plus, X, MapPin, SlidersHorizontal } from 'lucide-react';
 import { supabase, unwrap, ITEM_SELECT } from '../lib/supabase';
 import { CATEGORIES, navigate, useApp, useQuery } from '../lib/core';
+import { calculateDistance } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
+import DistanceFilterModal from '../components/DistanceFilterModal';
 import { EmptyState, ErrorBox, PageLoader } from '../components/ui';
 
 export default function FeedView() {
-  const { session } = useApp();
+  const { session, profile } = useApp();
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [category, setCategory] = useState('All');
+
+  // Location & Distance state
+  const [userLocation, setUserLocation] = useState(() => {
+    if (profile?.lat != null) {
+      return { name: profile.location_name || 'My location', lat: profile.lat, lng: profile.lng };
+    }
+    try {
+      const saved = localStorage.getItem('switchr_location');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { name: 'London', lat: 51.5074, lng: -0.1278 };
+  });
+
+  const [radius, setRadius] = useState(() => {
+    try {
+      const saved = localStorage.getItem('switchr_radius');
+      return saved !== null && saved !== 'null' ? Number(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [sortBy, setSortBy] = useState(() => {
+    try {
+      return localStorage.getItem('switchr_sort') || 'newest';
+    } catch {
+      return 'newest';
+    }
+  });
+
+  const [distanceModalOpen, setDistanceModalOpen] = useState(false);
+
+  // Sync profile location if loaded
+  useEffect(() => {
+    if (profile?.lat != null) {
+      setUserLocation((curr) => {
+        if (curr?.lat === profile.lat && curr?.lng === profile.lng) return curr;
+        return { name: profile.location_name || 'My location', lat: profile.lat, lng: profile.lng };
+      });
+    }
+  }, [profile?.lat, profile?.lng, profile?.location_name]);
+
+  const handleLocationChange = (loc) => {
+    setUserLocation(loc);
+    try {
+      localStorage.setItem('switchr_location', JSON.stringify(loc));
+    } catch {}
+  };
+
+  const handleRadiusChange = (rad) => {
+    setRadius(rad);
+    try {
+      localStorage.setItem('switchr_radius', rad == null ? 'null' : String(rad));
+    } catch {}
+  };
+
+  const handleSortChange = (sort) => {
+    setSortBy(sort);
+    try {
+      localStorage.setItem('switchr_sort', sort);
+    } catch {}
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 300);
@@ -31,15 +95,41 @@ export default function FeedView() {
     return unwrap(await q.limit(200));
   }, [category, session?.user?.id]);
 
-  const items = (allItems || []).filter((item) => {
-    if (!debounced) return true;
-    const term = debounced.toLowerCase();
-    const titleMatch = item.title?.toLowerCase().includes(term);
-    const descMatch = item.description?.toLowerCase().includes(term);
-    const locMatch = item.owner?.location_name?.toLowerCase().includes(term);
-    const userMatch = item.owner?.username?.toLowerCase().includes(term);
-    return titleMatch || descMatch || locMatch || userMatch;
-  });
+  // Compute distance and filter
+  const items = (allItems || [])
+    .map((item) => {
+      const dist = calculateDistance(
+        userLocation?.lat,
+        userLocation?.lng,
+        item.owner?.lat,
+        item.owner?.lng,
+      );
+      return { ...item, distance: dist };
+    })
+    .filter((item) => {
+      // Radius filter
+      if (radius != null && userLocation?.lat != null) {
+        if (item.distance != null && item.distance > radius) return false;
+      }
+      // Text search
+      if (!debounced) return true;
+      const term = debounced.toLowerCase();
+      const titleMatch = item.title?.toLowerCase().includes(term);
+      const descMatch = item.description?.toLowerCase().includes(term);
+      const locMatch = item.owner?.location_name?.toLowerCase().includes(term);
+      const userMatch = item.owner?.username?.toLowerCase().includes(term);
+      return titleMatch || descMatch || locMatch || userMatch;
+    });
+
+  // Sort: Closest first or Newest first
+  if (sortBy === 'closest') {
+    items.sort((a, b) => {
+      if (a.distance == null && b.distance == null) return 0;
+      if (a.distance == null) return 1;
+      if (b.distance == null) return -1;
+      return a.distance - b.distance;
+    });
+  }
 
   return (
     <div>
@@ -50,27 +140,50 @@ export default function FeedView() {
         <p className="mt-1 text-sm text-ink-soft">Browse what people are offering and make a trade.</p>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
-        <input
-          id="feed-search"
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search items, categories, or locations (e.g. Manchester, Camden)…"
-          className="field rounded-2xl py-3.5 pl-11 pr-10 text-base shadow-card"
-        />
-        {search && (
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted hover:bg-ink/5"
-            aria-label="Clear search"
-          >
-            <X size={16} />
-          </button>
-        )}
+      {/* Search Bar & Distance Filter Trigger */}
+      <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
+          <input
+            id="feed-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search items, categories, or locations (e.g. Manchester, Camden)…"
+            className="field rounded-2xl py-3.5 pl-11 pr-10 text-base shadow-card"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted hover:bg-ink/5"
+              aria-label="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Location / Radius Pill Button */}
+        <button
+          type="button"
+          id="feed-distance-pill"
+          onClick={() => setDistanceModalOpen(true)}
+          className={`flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition shadow-card ${
+            radius != null
+              ? 'border-brand bg-brand-soft text-brand ring-1 ring-brand/30'
+              : 'border-line bg-white text-ink-soft hover:border-brand/40'
+          }`}
+          title="Set location and distance radius"
+        >
+          <MapPin size={16} className="text-brand shrink-0" />
+          <span className="truncate max-w-[120px]">{userLocation?.name || 'Location'}</span>
+          <span className="text-muted">·</span>
+          <span className="whitespace-nowrap font-medium text-xs">
+            {radius != null ? `Within ${radius} km` : 'Any distance'}
+          </span>
+          <SlidersHorizontal size={14} className="text-muted ml-0.5" />
+        </button>
       </div>
 
       {/* Categories */}
@@ -89,22 +202,27 @@ export default function FeedView() {
       </div>
 
       {/* Filter status indicator */}
-      {!loading && !error && (debounced || category !== 'All') && (
+      {!loading && !error && (debounced || category !== 'All' || radius != null || sortBy === 'closest') && (
         <div className="mb-5 flex items-center justify-between text-xs text-muted">
           <span>
             Found <strong className="text-ink">{items.length}</strong> {items.length === 1 ? 'item' : 'items'}
             {debounced ? ` for "${debounced}"` : ''}
             {category !== 'All' ? ` in ${category}` : ''}
+            {radius != null ? ` within ${radius} km of ${userLocation?.name}` : ''}
+            {sortBy === 'closest' ? ' (closest first)' : ''}
           </span>
           <button
             type="button"
+            id="feed-clear-filters"
             onClick={() => {
               setSearch('');
               setCategory('All');
+              handleRadiusChange(null);
+              handleSortChange('newest');
             }}
             className="font-medium text-brand hover:underline"
           >
-            Clear filters
+            Clear all filters
           </button>
         </div>
       )}
@@ -116,16 +234,27 @@ export default function FeedView() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={PackageSearch}
-          title={debounced || category !== 'All' ? 'No matches' : 'Nothing listed yet'}
+          title={debounced || category !== 'All' || radius != null ? 'No matches within range' : 'Nothing listed yet'}
           text={
-            debounced || category !== 'All'
-              ? 'Try a different search or category.'
+            debounced || category !== 'All' || radius != null
+              ? 'Try widening your distance radius, changing location, or clearing search.'
               : 'Be the first! List an item and others can start offering.'
           }
           action={
-            <button type="button" className="btn-primary" onClick={() => navigate('/new')}>
-              <Plus size={16} /> List an item
-            </button>
+            <div className="flex gap-2">
+              {radius != null && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleRadiusChange(null)}
+                >
+                  Show all distances
+                </button>
+              )}
+              <button type="button" className="btn-primary" onClick={() => navigate('/new')}>
+                <Plus size={16} /> List an item
+              </button>
+            </div>
           }
         />
       ) : (
@@ -135,6 +264,17 @@ export default function FeedView() {
           ))}
         </div>
       )}
+
+      <DistanceFilterModal
+        open={distanceModalOpen}
+        onClose={() => setDistanceModalOpen(false)}
+        userLocation={userLocation}
+        onChangeLocation={handleLocationChange}
+        radius={radius}
+        onChangeRadius={handleRadiusChange}
+        sortBy={sortBy}
+        onChangeSortBy={handleSortChange}
+      />
     </div>
   );
 }

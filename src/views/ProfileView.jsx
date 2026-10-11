@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus } from 'lucide-react';
+import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation } from 'lucide-react';
 import { supabase, unwrap, getProfileStats } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
+import { getCurrentPosition, POPULAR_LOCATIONS } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
 import Modal from '../components/Modal';
 import { Avatar, BackButton, EmptyState, ErrorBox, PageLoader, Spinner, Stars } from '../components/ui';
@@ -257,20 +258,65 @@ export default function ProfileView({ userId }) {
 function EditProfileModal({ open, onClose, profile, onSaved }) {
   const [username, setUsername] = useState(profile.username || '');
   const [locationName, setLocationName] = useState(profile.location_name || '');
+  const [lat, setLat] = useState(profile.lat || null);
+  const [lng, setLng] = useState(profile.lng || null);
   const [bio, setBio] = useState(profile.bio || '');
   const [busy, setBusy] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleGps = async () => {
+    setGpsLoading(true);
+    setError('');
+    try {
+      const coords = await getCurrentPosition();
+      setLat(coords.lat);
+      setLng(coords.lng);
+      // Auto-assign nearest city name if currently blank
+      if (!locationName) {
+        let nearest = 'My location';
+        let minDist = Infinity;
+        POPULAR_LOCATIONS.forEach((c) => {
+          const d = Math.hypot(c.lat - coords.lat, c.lng - coords.lng);
+          if (d < minDist) {
+            minDist = d;
+            nearest = c.name;
+          }
+        });
+        setLocationName(minDist < 0.2 ? nearest : 'My location');
+      }
+    } catch (err) {
+      setError(err.message || 'Could not fetch GPS location.');
+    } finally {
+      setGpsLoading(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError('');
 
+    // If user typed a known city and didn't use GPS, link known coordinates
+    let finalLat = lat;
+    let finalLng = lng;
+    if (locationName) {
+      const matched = POPULAR_LOCATIONS.find((c) =>
+        locationName.toLowerCase().includes(c.name.toLowerCase()),
+      );
+      if (matched && !finalLat) {
+        finalLat = matched.lat;
+        finalLng = matched.lng;
+      }
+    }
+
     try {
       const payload = {
         username: username.trim(),
         location_name: locationName.trim() || null,
         bio: bio.trim() || null,
+        lat: finalLat,
+        lng: finalLng,
       };
       unwrap(
         await supabase
@@ -305,17 +351,38 @@ function EditProfileModal({ open, onClose, profile, onSaved }) {
         </div>
 
         <div>
-          <label htmlFor="edit-location" className="label">
-            Location <span className="normal-case tracking-normal text-muted">(e.g. Manchester, UK)</span>
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor="edit-location" className="label mb-0">
+              Location <span className="normal-case tracking-normal text-muted">(e.g. Manchester, UK)</span>
+            </label>
+            <button
+              type="button"
+              id="edit-gps-btn"
+              onClick={handleGps}
+              disabled={gpsLoading}
+              className="text-xs font-semibold text-brand hover:underline inline-flex items-center gap-1"
+            >
+              <Navigation size={12} /> {gpsLoading ? 'Locating...' : 'Use GPS'}
+            </button>
+          </div>
           <input
             id="edit-location"
             className="field"
             value={locationName}
-            onChange={(e) => setLocationName(e.target.value)}
+            onChange={(e) => {
+              setLocationName(e.target.value);
+              // Clear manual coords if user changes city
+              setLat(null);
+              setLng(null);
+            }}
             placeholder="e.g. Liverpool City Centre"
             maxLength={80}
           />
+          {lat != null && (
+            <p className="mt-1 text-[11px] text-muted flex items-center gap-1">
+              <MapPin size={11} className="text-brand" /> Coordinates linked: {lat.toFixed(2)}, {lng.toFixed(2)}
+            </p>
+          )}
         </div>
 
         <div>
