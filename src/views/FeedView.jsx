@@ -17,16 +17,19 @@ export default function FeedView() {
   }, [search]);
 
   const { data: allItems, loading, error, reload } = useQuery(async () => {
-    return unwrap(
-      await supabase
-        .from('items')
-        .select(ITEM_SELECT)
-        .eq('status', 'available')
-        .neq('user_id', session?.user?.id || '')
-        .order('created_at', { ascending: false })
-        .limit(200),
-    );
-  }, [session?.user?.id]);
+    let q = supabase
+      .from('items')
+      .select(ITEM_SELECT)
+      .eq('status', 'available')
+      .neq('user_id', session?.user?.id || '')
+      .order('created_at', { ascending: false });
+
+    if (category !== 'All') {
+      q = q.eq('category', category);
+    }
+
+    return unwrap(await q.limit(200));
+  }, [category, session?.user?.id]);
 
   const items = (allItems || []).filter((item) => {
     if (category !== 'All' && item.category !== category) return false;
