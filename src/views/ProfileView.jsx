@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft } from 'lucide-react';
-import { supabase, unwrap, getProfileStats } from '../lib/supabase';
+import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft, ShieldAlert } from 'lucide-react';
+import { supabase, unwrap, getProfileStats, deleteMyAccount } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import { getCurrentPosition, POPULAR_LOCATIONS } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
@@ -695,6 +695,37 @@ function EditProfileModal({ open, onClose, profile, onSaved }) {
         <button id="edit-profile-save" type="submit" className="btn-primary w-full py-3" disabled={busy}>
           {busy ? <Spinner className="h-4 w-4 text-white" /> : 'Save changes'}
         </button>
+
+        {/* GDPR & SOC 2 Self-Serve Account & Data Erasure */}
+        <div className="mt-6 border-t border-line/70 pt-4">
+          <p className="text-xs font-semibold text-ink">Privacy & Account Security</p>
+          <p className="mt-0.5 text-[11px] text-muted">
+            Permanently delete your account, listings, messages, reviews, and personal data (GDPR / SOC 2 Right to Erasure).
+          </p>
+          <button
+            type="button"
+            id="delete-account-btn"
+            onClick={async () => {
+              const confirmed = window.confirm(
+                'Are you sure you want to permanently delete your account?\n\nThis will permanently erase your profile, all listings, chats, and trade history. This action cannot be undone.'
+              );
+              if (!confirmed) return;
+              try {
+                setBusy(true);
+                await deleteMyAccount();
+                showToast('Your account and personal data have been completely deleted.', 'info');
+                navigate('/auth');
+              } catch (err) {
+                setError(errorMessage(err));
+                setBusy(false);
+              }
+            }}
+            disabled={busy}
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs font-semibold text-bad transition hover:bg-bad-soft"
+          >
+            <ShieldAlert size={14} /> Delete account & erase all data
+          </button>
+        </div>
       </form>
     </Modal>
   );

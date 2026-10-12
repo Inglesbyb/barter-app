@@ -47,3 +47,9 @@ export async function getProfileStats(userId) {
     tradesCompleted: Number(row.trades_completed ?? 0),
   };
 }
+
+export async function deleteMyAccount() {
+  unwrap(await supabase.rpc('delete_user_account'));
+  await supabase.auth.signOut();
+}
+
