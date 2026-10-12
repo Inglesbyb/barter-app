@@ -33,6 +33,19 @@ export default function App() {
   const [incomingNotifs, setIncomingNotifs] = useState([]);
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState('privacy');
+  // Toast notification helper
+  const showToast = useCallback((message, type = 'success') => {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   const [adminMode, setAdminMode] = useState(() => {
     try {
       return localStorage.getItem('switchr_admin_mode') === 'true';
@@ -58,19 +71,6 @@ export default function App() {
   }, []);
 
   const { path, parts } = useRoute();
-
-  // Toast notification helper
-  const showToast = useCallback((message, type = 'success') => {
-    const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  }, []);
-
-  const removeToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
 
   // Fetch current user's profile
   const fetchProfile = useCallback(async (userId) => {

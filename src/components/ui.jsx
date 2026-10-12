@@ -98,14 +98,17 @@ export function StatusBadge({ status }) {
   return <span className={`badge ${STATUS_STYLES[status] ?? ''}`}>{STATUS_LABELS[status] ?? status}</span>;
 }
 
-export function EmptyState({ icon: Icon, title, text, action }) {
+export function EmptyState({ icon: Icon, title, text, message, action }) {
+  const description = text || message;
   return (
     <div className="card flex flex-col items-center px-6 py-14 text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft">
-        <Icon className="text-brand" size={26} />
-      </div>
+      {Icon && (
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft">
+          <Icon className="text-brand" size={26} />
+        </div>
+      )}
       <h3 className="font-display text-lg font-semibold">{title}</h3>
-      {text && <p className="mt-1 max-w-sm text-sm text-ink-soft">{text}</p>}
+      {description && <p className="mt-1 max-w-sm text-sm text-ink-soft">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
   );

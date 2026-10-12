@@ -345,7 +345,7 @@ function AccountsModerationPanel({ showToast, currentUserId }) {
       {loading ? (
         <PageLoader />
       ) : users.length === 0 ? (
-        <EmptyState title="No accounts found" message="Try adjusting your search or filters." />
+        <EmptyState icon={Users} title="No accounts found" text="Try adjusting your search or filters." />
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
@@ -600,7 +600,7 @@ function MessagesInspectorPanel({ showToast }) {
       {loading ? (
         <PageLoader />
       ) : messages.length === 0 ? (
-        <EmptyState title="No messages found" message="No chat messages match your search filter." />
+        <EmptyState icon={MessageSquare} title="No messages found" text="No chat messages match your search filter." />
       ) : (
         <div className="space-y-3">
           {messages.map((msg) => {
@@ -784,7 +784,7 @@ function MediaGalleryPanel({ showToast }) {
       {loading ? (
         <PageLoader />
       ) : filteredMedia.length === 0 ? (
-        <EmptyState title="No images found" message="No images match the selected filter." />
+        <EmptyState icon={ImageIcon} title="No images found" text="No images match the selected filter." />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {filteredMedia.map((item) => (
