@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Navigation, Compass, Check, ArrowDownUp, Search, X, Sparkles } from 'lucide-react';
+import { MapPin, Navigation, Compass, Check, ArrowDownUp, Search, X, Sparkles, Sliders } from 'lucide-react';
 import Modal from './Modal';
 import { Spinner } from './ui';
+import InteractiveRadiusMap from './InteractiveRadiusMap';
 import { POPULAR_LOCATIONS, RADIUS_PRESETS, getCurrentPosition, lookupLocationOrPostcode } from '../lib/geo';
 
 export default function DistanceFilterModal({
@@ -20,6 +21,11 @@ export default function DistanceFilterModal({
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResult, setLookupResult] = useState(null);
   const [lookupError, setLookupError] = useState('');
+
+  // Default coordinates to Liverpool center if not set
+  const currentLat = userLocation?.lat ?? 53.4082;
+  const currentLng = userLocation?.lng ?? -2.9916;
+  const currentLocationName = userLocation?.name || 'Liverpool, UK';
 
   // Clear transient search state when modal reopens
   useEffect(() => {
@@ -46,7 +52,7 @@ export default function DistanceFilterModal({
           lng: result.lng,
         });
       } else {
-        setLookupError(`Could not find "${text}". Try a UK postcode (e.g. M1, SW1A 1AA, BS1) or city.`);
+        setLookupError(`Could not find "${text}". Try a UK postcode (e.g. L1, M1, SW1A 1AA) or city.`);
       }
     } catch {
       setLookupError('Error looking up location. Please try again.');
@@ -61,7 +67,6 @@ export default function DistanceFilterModal({
     setLookupError('');
     try {
       const coords = await getCurrentPosition();
-      // Find closest known city or use Current Location
       let closestCity = 'My location';
       let minDist = Infinity;
       POPULAR_LOCATIONS.forEach((c) => {
@@ -83,51 +88,29 @@ export default function DistanceFilterModal({
     }
   };
 
-  return (
-    <Modal open={open} onClose={onClose} title="Location & Distance">
-      <div className="space-y-5">
-        {/* Current Location Box */}
-        <div>
-          <span className="label">Active search center</span>
-          <div className="flex items-center justify-between rounded-2xl border border-line bg-canvas p-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                <MapPin size={17} />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-ink">
-                  {userLocation?.name || 'No location set'}
-                </p>
-                <p className="text-[11px] text-muted">
-                  {userLocation?.lat != null
-                    ? `${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)}`
-                    : 'Set a location to filter and sort listings by distance'}
-                </p>
-              </div>
-            </div>
+  // Convert distance for helper label
+  const milesDisplay = radius != null ? Math.round(radius * 0.621371) : null;
 
+  return (
+    <Modal open={open} onClose={onClose} title="Location & Radius">
+      <div className="space-y-4 max-h-[82vh] overflow-y-auto pr-1">
+        
+        {/* 1. Location Input & GPS Trigger */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-ink">Search location</span>
             <button
               type="button"
               id="gps-location-btn"
               onClick={handleUseGps}
               disabled={gpsLoading}
-              className="btn-secondary rounded-xl px-3 py-1.5 text-xs shrink-0"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
             >
-              {gpsLoading ? (
-                <Spinner className="h-3.5 w-3.5" />
-              ) : (
-                <>
-                  <Navigation size={13} className="text-brand" /> GPS
-                </>
-              )}
+              <Navigation size={12} className="text-brand" />
+              {gpsLoading ? 'Locating...' : 'Use current location'}
             </button>
           </div>
-          {gpsError && <p className="mt-1.5 text-xs text-bad">{gpsError}</p>}
-        </div>
 
-        {/* Postcode & Town Search Input */}
-        <div>
-          <span className="label">Type a postcode or town</span>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -145,7 +128,7 @@ export default function DistanceFilterModal({
                   setPostcodeInput(e.target.value);
                   setLookupError('');
                 }}
-                placeholder="e.g. M1, SW1A 1AA, BS1, Brighton…"
+                placeholder="Type a postcode or city (e.g. L1, M1 1AE, Liverpool, Chester)…"
                 className="field rounded-xl py-2 pl-9 pr-8 text-xs font-medium"
               />
               {postcodeInput && (
@@ -157,7 +140,7 @@ export default function DistanceFilterModal({
                     setLookupError('');
                   }}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink"
-                  aria-label="Clear postcode"
+                  aria-label="Clear input"
                 >
                   <X size={14} />
                 </button>
@@ -169,49 +152,112 @@ export default function DistanceFilterModal({
               disabled={lookupLoading || !postcodeInput.trim()}
               className="btn-primary rounded-xl px-3.5 py-2 text-xs font-semibold shrink-0"
             >
-              {lookupLoading ? <Spinner className="h-3.5 w-3.5" /> : 'Find'}
+              {lookupLoading ? <Spinner className="h-3.5 w-3.5" /> : 'Set'}
             </button>
           </form>
 
-          {/* Inline Feedback */}
           {lookupResult && (
-            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 border border-emerald-200">
+            <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 border border-emerald-200">
               <Sparkles size={13} className="text-emerald-600 shrink-0" />
-              <span className="truncate">Set location to <strong>{lookupResult.name}</strong></span>
+              <span className="truncate">Centered on <strong>{lookupResult.name}</strong></span>
             </div>
           )}
           {lookupError && <p className="mt-1.5 text-xs text-bad">{lookupError}</p>}
+          {gpsError && <p className="mt-1.5 text-xs text-bad">{gpsError}</p>}
         </div>
 
         {/* Quick Popular Cities */}
-        <div>
-          <span className="label">Or select a city</span>
-          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto no-scrollbar">
-            {POPULAR_LOCATIONS.map((loc) => {
-              const active = userLocation?.name === loc.name;
-              return (
-                <button
-                  key={loc.name}
-                  type="button"
-                  id={`city-pick-${loc.name.toLowerCase()}`}
-                  onClick={() => onChangeLocation({ name: loc.name, lat: loc.lat, lng: loc.lng })}
-                  className={`rounded-xl border px-2.5 py-1 text-xs font-medium transition ${
-                    active
-                      ? 'border-brand bg-brand text-white shadow-sm'
-                      : 'border-line bg-white text-ink-soft hover:border-brand/40'
-                  }`}
-                >
-                  {loc.name}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          {POPULAR_LOCATIONS.slice(0, 6).map((loc) => {
+            const active = userLocation?.name?.toLowerCase().includes(loc.name.toLowerCase());
+            return (
+              <button
+                key={loc.name}
+                type="button"
+                id={`city-pick-${loc.name.toLowerCase()}`}
+                onClick={() => onChangeLocation({ name: loc.name, lat: loc.lat, lng: loc.lng })}
+                className={`rounded-xl border px-2.5 py-1 text-[11px] font-medium transition ${
+                  active
+                    ? 'border-brand bg-brand-soft text-brand font-semibold ring-1 ring-brand/30'
+                    : 'border-line bg-white text-ink-soft hover:border-brand/40'
+                }`}
+              >
+                {loc.name}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Radius Selector */}
+        {/* 2. Interactive Map with Real-Time Radius Circle (Facebook Marketplace Style) */}
         <div>
-          <span className="label">Maximum distance</span>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-ink">Search zone preview</span>
+            <span className="text-[11px] text-muted flex items-center gap-1">
+              <MapPin size={11} className="text-brand" /> {currentLocationName}
+            </span>
+          </div>
+
+          <InteractiveRadiusMap
+            lat={currentLat}
+            lng={currentLng}
+            radiusKm={radius}
+            locationName={currentLocationName}
+            onCenterChange={({ lat, lng }) => {
+              onChangeLocation({
+                name: userLocation?.name || 'Selected point',
+                lat,
+                lng,
+              });
+            }}
+          />
+        </div>
+
+        {/* 3. Facebook Marketplace Sliding Scale */}
+        <div className="rounded-2xl border border-line bg-canvas p-3.5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Sliders size={14} className="text-brand" />
+              <span className="text-xs font-semibold text-ink">Search distance</span>
+            </div>
+            <div className="text-right">
+              <span className="inline-flex items-center rounded-lg bg-brand-soft px-2.5 py-0.5 text-xs font-bold text-brand shadow-xs">
+                {radius != null ? `${radius} km` : 'All UK (Any distance)'}
+              </span>
+              {radius != null && (
+                <span className="block text-[10px] text-muted">
+                  ~{milesDisplay} miles radius
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Continuous Range Slider */}
+          <div className="space-y-1">
+            <input
+              type="range"
+              id="distance-range-slider"
+              min="1"
+              max="100"
+              step="1"
+              value={radius ?? 100}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                onChangeRadius(val >= 100 ? null : val);
+              }}
+              className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-line accent-brand"
+              aria-label="Distance radius slider"
+            />
+            <div className="flex justify-between text-[10px] font-medium text-muted px-0.5">
+              <span>1 km</span>
+              <span>25 km</span>
+              <span>50 km</span>
+              <span>75 km</span>
+              <span>100+ km</span>
+            </div>
+          </div>
+
+          {/* Quick Snap Preset Chips */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
             {RADIUS_PRESETS.map((p) => {
               const active = radius === p.value;
               return (
@@ -220,9 +266,9 @@ export default function DistanceFilterModal({
                   type="button"
                   id={`radius-${p.value ?? 'any'}`}
                   onClick={() => onChangeRadius(p.value)}
-                  className={`flex flex-col items-center justify-center rounded-xl border py-2.5 text-xs font-semibold transition ${
+                  className={`flex-1 min-w-[50px] rounded-xl border py-1.5 text-[11px] font-semibold transition text-center ${
                     active
-                      ? 'border-brand bg-brand-soft text-brand shadow-sm ring-1 ring-brand'
+                      ? 'border-brand bg-brand text-white shadow-xs'
                       : 'border-line bg-white text-ink-soft hover:border-brand/40'
                   }`}
                 >
@@ -233,44 +279,47 @@ export default function DistanceFilterModal({
           </div>
         </div>
 
-        {/* Sorting */}
-        <div>
-          <span className="label">Sort order</span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              id="sort-closest"
-              onClick={() => onChangeSortBy('closest')}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition ${
-                sortBy === 'closest'
-                  ? 'border-brand bg-brand-soft text-brand ring-1 ring-brand'
-                  : 'border-line bg-white text-ink-soft hover:border-brand/40'
-              }`}
-            >
-              <Compass size={14} /> Closest first
-            </button>
-            <button
-              type="button"
-              id="sort-newest"
-              onClick={() => onChangeSortBy('newest')}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition ${
-                sortBy === 'newest'
-                  ? 'border-brand bg-brand-soft text-brand ring-1 ring-brand'
-                  : 'border-line bg-white text-ink-soft hover:border-brand/40'
-              }`}
-            >
-              <ArrowDownUp size={14} /> Newest first
-            </button>
+        {/* 4. Sort Order */}
+        {onChangeSortBy && (
+          <div>
+            <span className="text-xs font-semibold text-ink mb-1.5 block">Sort order</span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                id="sort-closest"
+                onClick={() => onChangeSortBy('closest')}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition ${
+                  sortBy === 'closest'
+                    ? 'border-brand bg-brand-soft text-brand ring-1 ring-brand'
+                    : 'border-line bg-white text-ink-soft hover:border-brand/40'
+                }`}
+              >
+                <Compass size={14} /> Closest first
+              </button>
+              <button
+                type="button"
+                id="sort-newest"
+                onClick={() => onChangeSortBy('newest')}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition ${
+                  sortBy === 'newest'
+                    ? 'border-brand bg-brand-soft text-brand ring-1 ring-brand'
+                    : 'border-line bg-white text-ink-soft hover:border-brand/40'
+                }`}
+              >
+                <ArrowDownUp size={14} /> Newest first
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
+        {/* 5. Apply Button */}
         <button
           type="button"
           id="distance-modal-apply"
           onClick={onClose}
-          className="btn-primary w-full py-3 text-sm"
+          className="btn-primary w-full py-3 text-xs font-semibold shadow-lift"
         >
-          <Check size={16} /> Apply distance filter
+          <Check size={16} /> Apply distance filter ({radius != null ? `${radius} km of ${currentLocationName}` : 'All UK'})
         </button>
       </div>
     </Modal>
