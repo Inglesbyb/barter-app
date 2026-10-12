@@ -129,4 +129,93 @@ export async function adminTriggerBotBid(targetItemId, botId = null) {
   );
 }
 
+export async function adminGetBiddableItems({
+  search = '',
+  ownerId = null,
+  category = 'all',
+  unbidOnly = false,
+  limit = 50,
+  offset = 0,
+} = {}) {
+  return unwrap(
+    await supabase.rpc('admin_get_biddable_items', {
+      p_search: search,
+      p_owner_id: ownerId,
+      p_category: category,
+      p_unbid_only: unbidOnly,
+      p_limit: limit,
+      p_offset: offset,
+    }),
+  );
+}
+
+export async function adminBatchBotBid(limit = 10) {
+  return unwrap(
+    await supabase.rpc('admin_batch_bot_bid', {
+      p_limit: limit,
+    }),
+  );
+}
+
+export async function adminGetBotTrades({ status = 'all', limit = 50, offset = 0 } = {}) {
+  return unwrap(
+    await supabase.rpc('admin_get_bot_trades', {
+      p_status: status,
+      p_limit: limit,
+      p_offset: offset,
+    }),
+  );
+}
+
+export async function adminBotAcceptTrade(tradeId) {
+  return unwrap(
+    await supabase.rpc('admin_bot_accept_trade', {
+      p_trade_id: tradeId,
+    }),
+  );
+}
+
+export async function adminBotSendMessage(tradeId, content, botId = null) {
+  return unwrap(
+    await supabase.rpc('admin_bot_send_message', {
+      p_trade_id: tradeId,
+      p_content: content,
+      p_bot_id: botId,
+    }),
+  );
+}
+
+export async function adminBotAddItem({
+  botId,
+  title,
+  description = null,
+  category,
+  condition,
+  imageUrl,
+}) {
+  return unwrap(
+    await supabase.rpc('admin_bot_add_item', {
+      p_bot_id: botId,
+      p_title: title,
+      p_description: description,
+      p_category: category,
+      p_condition: condition,
+      p_image_url: imageUrl,
+    }),
+  );
+}
+
+export async function adminSetAutoBotBidding(enabled) {
+  return unwrap(
+    await supabase.rpc('admin_set_auto_bot_bidding', {
+      p_enabled: enabled,
+    }),
+  );
+}
+
+export async function adminGetAutoBotBidding() {
+  return unwrap(await supabase.rpc('admin_get_auto_bot_bidding'));
+}
+
+
 

@@ -20,7 +20,16 @@ import {
   Calendar,
   Send,
   Zap,
-  Check
+  Check,
+  Plus,
+  Play,
+  CheckCheck,
+  MessageCircle,
+  Filter,
+  Layers,
+  Package,
+  Sliders,
+  Clock
 } from 'lucide-react';
 import { 
   supabase, 
@@ -32,6 +41,14 @@ import {
   adminGetAllMedia, 
   adminRemoveMedia,
   adminTriggerBotBid,
+  adminGetBiddableItems,
+  adminBatchBotBid,
+  adminGetBotTrades,
+  adminBotAcceptTrade,
+  adminBotSendMessage,
+  adminBotAddItem,
+  adminSetAutoBotBidding,
+  adminGetAutoBotBidding,
   unwrap
 } from '../lib/supabase';
 import { useApp, navigate, errorMessage } from '../lib/core';
@@ -888,62 +905,202 @@ function MediaGalleryPanel({ showToast }) {
 }
 
 // -----------------------------------------------------------------------------
-// 4. BOTS & SIMULATION PANEL
+// 4. ADVANCED BOTS & SIMULATION MISSION CONTROL PANEL
 // -----------------------------------------------------------------------------
 function BotsControlPanel({ showToast, currentUserId }) {
+  const [subTab, setSubTab] = useState('target'); // 'target' | 'trades' | 'fleet'
   const [bots, setBots] = useState([]);
-  const [userItems, setUserItems] = useState([]);
-  const [selectedItem, setSelectedItem] = useState('');
-  const [selectedBot, setSelectedBot] = useState('');
-  const [biddingBusy, setBiddingBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadBotData = useCallback(async () => {
+  // Auto-bidding master switch
+  const [autoBiddingEnabled, setAutoBiddingEnabled] = useState(true);
+  const [togglingAuto, setTogglingAuto] = useState(false);
+
+  // Sub-Tab A: Target items for bidding
+  const [biddableItems, setBiddableItems] = useState([]);
+  const [biddableLoading, setBiddableLoading] = useState(false);
+  const [itemSearch, setItemSearch] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('humans'); // 'all' | 'humans' | 'mine'
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [unbidOnly, setUnbidOnly] = useState(false);
+  const [bidModalItem, setBidModalItem] = useState(null);
+  const [selectedBotId, setSelectedBotId] = useState('');
+  const [botInventory, setBotInventory] = useState([]);
+  const [selectedBotItemId, setSelectedBotItemId] = useState('');
+  const [biddingBusy, setBiddingBusy] = useState(false);
+  const [batchSurgeBusy, setBatchSurgeBusy] = useState(false);
+
+  // Sub-Tab B: Bot active trades
+  const [botTrades, setBotTrades] = useState([]);
+  const [tradesLoading, setTradesLoading] = useState(false);
+  const [tradeStatusFilter, setTradeStatusFilter] = useState('all');
+  const [customMsgTradeId, setCustomMsgTradeId] = useState(null);
+  const [customMsgText, setCustomMsgText] = useState('');
+  const [tradeActionBusyId, setTradeActionBusyId] = useState(null);
+
+  // Sub-Tab C: Bot fleet & Add inventory
+  const [addInventoryModalBot, setAddInventoryModalBot] = useState(null);
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('Collectibles');
+  const [newItemCondition, setNewItemCondition] = useState('Good');
+  const [newItemImage, setNewItemImage] = useState('');
+  const [newItemDesc, setNewItemDesc] = useState('');
+  const [addItemBusy, setAddItemBusy] = useState(false);
+
+  // Load initial bot fleet and auto-bidding state
+  const loadFleetAndSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const [botProfiles, myItems] = await Promise.all([
+      const [botProfiles, autoSetting] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, username, location_name, created_at, is_bot')
           .eq('is_bot', true)
           .order('username', { ascending: true })
           .then(unwrap),
-        supabase
-          .from('items')
-          .select('id, title, category, condition, image_url')
-          .eq('user_id', currentUserId)
-          .eq('status', 'available')
-          .order('created_at', { ascending: false })
-          .then(unwrap),
+        adminGetAutoBotBidding().catch(() => true),
       ]);
-
       setBots(botProfiles || []);
-      setUserItems(myItems || []);
-      if (myItems && myItems.length > 0) {
-        setSelectedItem(myItems[0].id);
-      }
+      setAutoBiddingEnabled(autoSetting !== false);
     } catch (err) {
       showToast(errorMessage(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [currentUserId, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
-    loadBotData();
-  }, [loadBotData]);
+    loadFleetAndSettings();
+  }, [loadFleetAndSettings]);
 
-  const handleTriggerBotBid = async () => {
-    if (!selectedItem) {
-      showToast('Please select one of your items to receive an offer.', 'error');
+  // Load biddable items when on 'target' subTab
+  const fetchBiddableItems = useCallback(async () => {
+    setBiddableLoading(true);
+    try {
+      const ownerId = ownerFilter === 'mine' ? currentUserId : null;
+      const data = await adminGetBiddableItems({
+        search: itemSearch,
+        ownerId,
+        category: categoryFilter,
+        unbidOnly: unbidOnly || ownerFilter === 'humans',
+        limit: 80,
+      });
+
+      let filtered = data || [];
+      if (ownerFilter === 'humans') {
+        filtered = filtered.filter((i) => !i.owner_is_bot);
+      }
+      setBiddableItems(filtered);
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setBiddableLoading(false);
+    }
+  }, [itemSearch, ownerFilter, categoryFilter, unbidOnly, currentUserId, showToast]);
+
+  useEffect(() => {
+    if (subTab === 'target') {
+      fetchBiddableItems();
+    }
+  }, [subTab, fetchBiddableItems]);
+
+  // Load bot trades when on 'trades' subTab
+  const fetchBotTrades = useCallback(async () => {
+    setTradesLoading(true);
+    try {
+      const data = await adminGetBotTrades({
+        status: tradeStatusFilter,
+        limit: 50,
+      });
+      setBotTrades(data || []);
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setTradesLoading(false);
+    }
+  }, [tradeStatusFilter, showToast]);
+
+  useEffect(() => {
+    if (subTab === 'trades') {
+      fetchBotTrades();
+    }
+  }, [subTab, fetchBotTrades]);
+
+  // Load bot inventory when a bot is selected in Bid Modal
+  useEffect(() => {
+    if (!selectedBotId) {
+      setBotInventory([]);
+      setSelectedBotItemId('');
       return;
     }
+    supabase
+      .from('items')
+      .select('id, title, category, condition, image_url')
+      .eq('user_id', selectedBotId)
+      .eq('status', 'available')
+      .then(({ data }) => {
+        setBotInventory(data || []);
+      });
+  }, [selectedBotId]);
 
+  // Master Auto-Bidding Toggle
+  const handleToggleAutoBidding = async () => {
+    const nextVal = !autoBiddingEnabled;
+    setTogglingAuto(true);
+    try {
+      await adminSetAutoBotBidding(nextVal);
+      setAutoBiddingEnabled(nextVal);
+      showToast(
+        nextVal
+          ? '🤖 Automated Bot Bidding is now ENABLED for new listings.'
+          : '⏸️ Automated Bot Bidding has been PAUSED.',
+        nextVal ? 'success' : 'info',
+      );
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setTogglingAuto(false);
+    }
+  };
+
+  // One-Click Marketplace Surge
+  const handleBatchSurge = async () => {
+    const confirmed = window.confirm(
+      '⚡ Stimulate Market:\n\nThis will command Liverpool bots to find up to 10 active human listings that currently have NO offers, and place realistic barter offers on each one.\n\nProceed?',
+    );
+    if (!confirmed) return;
+
+    setBatchSurgeBusy(true);
+    try {
+      const res = await adminBatchBotBid(10);
+      showToast(
+        `⚡ Market stimulated! Placed ${res?.bids_created || 0} new bot offers across listings.`,
+        'success',
+      );
+      if (subTab === 'target') fetchBiddableItems();
+      if (subTab === 'trades') fetchBotTrades();
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setBatchSurgeBusy(false);
+    }
+  };
+
+  // Submit manual bot bid on an item
+  const handleExecuteBotBid = async () => {
+    if (!bidModalItem) return;
     setBiddingBusy(true);
     try {
-      const tradeId = await adminTriggerBotBid(selectedItem, selectedBot || null);
-      showToast('⚡ Bot trade offer placed! Check your Trades inbox.', 'success');
-      navigate(`/trades?tab=received`);
+      const tradeId = await adminTriggerBotBid(
+        bidModalItem.id,
+        selectedBotId || null,
+      );
+      showToast(
+        `⚡ Bot offer placed on "${bidModalItem.title}"! (Owner: @${bidModalItem.owner_username})`,
+        'success',
+      );
+      setBidModalItem(null);
+      fetchBiddableItems();
     } catch (err) {
       showToast(errorMessage(err), 'error');
     } finally {
@@ -951,104 +1108,893 @@ function BotsControlPanel({ showToast, currentUserId }) {
     }
   };
 
+  // Bot trade actions (Accept, Send Message, Scouse Reply)
+  const handleBotAcceptTrade = async (tradeId) => {
+    setTradeActionBusyId(tradeId);
+    try {
+      await adminBotAcceptTrade(tradeId);
+      showToast('✅ Trade accepted on behalf of bot! Greeting sent to chat.', 'success');
+      fetchBotTrades();
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setTradeActionBusyId(null);
+    }
+  };
+
+  const handleSendBotMessage = async (tradeId, botId) => {
+    if (!customMsgText.trim()) return;
+    setTradeActionBusyId(tradeId);
+    try {
+      await adminBotSendMessage(tradeId, customMsgText.trim(), botId);
+      showToast('💬 Message sent as bot.', 'success');
+      setCustomMsgTradeId(null);
+      setCustomMsgText('');
+      fetchBotTrades();
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setTradeActionBusyId(null);
+    }
+  };
+
+  const handleTriggerScouseReply = async (tradeId) => {
+    setTradeActionBusyId(tradeId);
+    try {
+      await supabase.rpc('bot_reply_to_trade', {
+        p_trade_id: tradeId,
+        p_user_message: 'where can we meet up in town?',
+      });
+      showToast('⚡ Triggered localized Scouse bot reply in trade chat.', 'info');
+      fetchBotTrades();
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setTradeActionBusyId(null);
+    }
+  };
+
+  // Add inventory item to bot
+  const handleCreateBotItem = async (e) => {
+    e.preventDefault();
+    if (!addInventoryModalBot || !newItemTitle.trim()) return;
+    setAddItemBusy(true);
+    try {
+      await adminBotAddItem({
+        botId: addInventoryModalBot.id,
+        title: newItemTitle.trim(),
+        description: newItemDesc.trim() || null,
+        category: newItemCategory,
+        condition: newItemCondition,
+        imageUrl:
+          newItemImage.trim() ||
+          'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&auto=format&fit=crop&q=80',
+      });
+      showToast(`📦 Added "${newItemTitle}" to @${addInventoryModalBot.username}'s inventory!`, 'success');
+      setAddInventoryModalBot(null);
+      setNewItemTitle('');
+      setNewItemDesc('');
+      setNewItemImage('');
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setAddItemBusy(false);
+    }
+  };
+
+  const PRESET_TEMPLATES = [
+    {
+      title: 'Vintage Beatles Abbey Road Vinyl',
+      category: 'Collectibles',
+      condition: 'Like new',
+      image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=600&auto=format&fit=crop&q=80',
+    },
+    {
+      title: 'Sony WH-1000XM4 Noise Cancelling Headphones',
+      category: 'Electronics',
+      condition: 'Like new',
+      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80',
+    },
+    {
+      title: 'Nintendo Switch Lite (Turquoise)',
+      category: 'Gaming',
+      condition: 'Good',
+      image: 'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?w=600&auto=format&fit=crop&q=80',
+    },
+    {
+      title: 'Retro Polaroid Sun 660 Instant Camera',
+      category: 'Collectibles',
+      condition: 'Good',
+      image: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&auto=format&fit=crop&q=80',
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Bot Bid Simulator Card */}
-      <div className="card p-6 bg-linear-to-br from-white to-amber-50/40 border-amber-200/60 shadow-lift">
-        <div className="flex items-center gap-2 text-amber-700 font-bold text-sm">
-          <Sparkles size={18} className="text-amber-500" />
-          <span>Automated Bid Trigger</span>
-        </div>
-        <h2 className="font-display text-xl font-extrabold text-ink mt-1">
-          Make a Bot Place an Offer on Your Item
-        </h2>
-        <p className="text-xs text-muted mt-1 max-w-xl">
-          Instantly tests the trade offer lifecycle, sound alerts, realtime push notifications, and chat messaging.
-        </p>
-
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Master Bot Automation & Activity Header Card */}
+      <div className="card p-6 bg-linear-to-br from-white via-indigo-50/20 to-amber-50/30 border-indigo-200/50 shadow-lift">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <label className="label">Target Item (Your Available Listings)</label>
-            {userItems.length === 0 ? (
-              <p className="text-xs text-muted italic p-2 bg-canvas rounded-xl">
-                You have no available items. List an item first to receive a bot bid!
-              </p>
-            ) : (
-              <select
-                className="field text-sm"
-                value={selectedItem}
-                onChange={(e) => setSelectedItem(e.target.value)}
+            <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs uppercase tracking-wider">
+              <Bot size={16} />
+              <span>Liverpool Bot Network (20 Autonomous Agents)</span>
+            </div>
+            <h2 className="font-display text-2xl font-black text-ink mt-1">
+              Bot Mission Control & Market Simulator
+            </h2>
+            <p className="text-xs text-muted mt-1 max-w-xl">
+              Command bots to bid on any user’s items, simulate active trade negotiations, inject fresh items into bot inventories, or trigger marketplace surges.
+            </p>
+          </div>
+
+          {/* Quick Actions & Master Toggle */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Auto-Bidding Switch */}
+            <div className="flex items-center gap-2.5 rounded-2xl bg-canvas p-2.5 border border-line">
+              <div className="text-right">
+                <p className="text-xs font-bold text-ink">Auto-Bid on New Items</p>
+                <p className="text-[10px] text-muted">
+                  {autoBiddingEnabled ? 'Active on all listings' : 'Paused (Manual only)'}
+                </p>
+              </div>
+              <button
+                type="button"
+                id="bot-auto-bidding-toggle-btn"
+                onClick={handleToggleAutoBidding}
+                disabled={togglingAuto}
+                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  autoBiddingEnabled ? 'bg-indigo-600' : 'bg-slate-300'
+                }`}
+                title="Toggle automatic bot bidding on/off"
               >
-                {userItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title} ({item.category} • {item.condition})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+                <span
+                  className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
+                    autoBiddingEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                >
+                  {autoBiddingEnabled ? (
+                    <Zap size={11} className="text-indigo-600 fill-indigo-600" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  )}
+                </span>
+              </button>
+            </div>
 
-          <div>
-            <label className="label">Select Specific Bot (Or Random)</label>
-            <select
-              className="field text-sm"
-              value={selectedBot}
-              onChange={(e) => setSelectedBot(e.target.value)}
+            {/* Stimulate Market Button */}
+            <button
+              type="button"
+              id="bot-batch-surge-btn"
+              onClick={handleBatchSurge}
+              disabled={batchSurgeBusy}
+              className="btn-primary py-2.5 px-4 text-xs font-bold flex items-center gap-2 shadow-lift bg-linear-to-r from-indigo-600 to-brand hover:opacity-95"
+              title="Command bots to bid on all active human listings with 0 offers"
             >
-              <option value="">Random Liverpool Bot</option>
-              {bots.map((bot) => (
-                <option key={bot.id} value={bot.id}>
-                  @{bot.username} ({bot.location_name})
-                </option>
-              ))}
-            </select>
+              {batchSurgeBusy ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Sparkles size={14} className="fill-white" />
+              )}
+              <span>⚡ Stimulate Market (Auto-Bid All Unbid)</span>
+            </button>
           </div>
         </div>
+      </div>
+
+      {/* Sub-Tabs: Target Items | Active Trades | Fleet */}
+      <div className="flex border-b border-line gap-2 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setSubTab('target')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition whitespace-nowrap ${
+            subTab === 'target'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-ink-soft hover:text-ink'
+          }`}
+        >
+          <Zap size={15} />
+          <span>🎯 Bid on Any User's Item ({biddableItems.length})</span>
+        </button>
 
         <button
           type="button"
-          onClick={handleTriggerBotBid}
-          disabled={biddingBusy || userItems.length === 0}
-          className="btn-primary mt-5 py-3 px-6 text-sm flex items-center gap-2"
+          onClick={() => setSubTab('trades')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition whitespace-nowrap ${
+            subTab === 'trades'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-ink-soft hover:text-ink'
+          }`}
         >
-          {biddingBusy ? (
-            <RefreshCw size={16} className="animate-spin" />
-          ) : (
-            <Zap size={16} className="fill-white" />
-          )}
-          <span>Trigger Instant Bot Offer Now</span>
+          <Layers size={15} />
+          <span>🔄 Bot Active Trades & Simulator</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('fleet')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition whitespace-nowrap ${
+            subTab === 'fleet'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-ink-soft hover:text-ink'
+          }`}
+        >
+          <Bot size={15} />
+          <span>📦 Liverpool Bot Fleet ({bots.length})</span>
         </button>
       </div>
 
-      {/* Registered Bots Directory */}
-      <div className="card p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-ink text-base">Liverpool Bot Network ({bots.length})</h3>
-            <p className="text-xs text-muted">Automated trading peers across Merseyside</p>
-          </div>
-          <button
-            type="button"
-            onClick={loadBotData}
-            className="btn-ghost p-2 text-muted hover:text-ink"
-            title="Refresh bot list"
-          >
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
+      {/* ----------------------------------------------------------------- */}
+      {/* SUB-TAB 1: TARGET ANY USER'S ITEM FOR BOT BIDDING                */}
+      {/* ----------------------------------------------------------------- */}
+      {subTab === 'target' && (
+        <div className="space-y-4">
+          {/* Search & Filter Toolbar */}
+          <div className="card p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} />
+              <input
+                type="text"
+                className="field pl-9 py-1.5 text-xs"
+                placeholder="Search items, users, locations..."
+                value={itemSearch}
+                onChange={(e) => setItemSearch(e.target.value)}
+              />
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {bots.map((bot) => (
-            <div key={bot.id} className="p-3 rounded-2xl bg-canvas border border-line flex items-center gap-3">
-              <Avatar name={bot.username} size={34} />
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-ink truncate">@{bot.username}</p>
-                <p className="text-[11px] text-muted truncate">{bot.location_name}</p>
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {/* Owner Filter */}
+              <div className="flex items-center rounded-xl bg-canvas p-1 border border-line text-xs font-semibold">
+                {[
+                  { id: 'humans', label: 'Humans Only' },
+                  { id: 'all', label: 'All Items' },
+                  { id: 'mine', label: 'My Listings' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setOwnerFilter(f.id)}
+                    className={`rounded-lg px-2.5 py-1 text-xs transition ${
+                      ownerFilter === f.id
+                        ? 'bg-white text-ink shadow-2xs font-bold'
+                        : 'text-muted hover:text-ink'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Category Dropdown */}
+              <select
+                className="field text-xs py-1.5 w-auto"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="all">All Categories</option>
+                <option value="Electronics">Electronics</option>
+                <option value="Collectibles">Collectibles</option>
+                <option value="Clothing">Clothing</option>
+                <option value="Home & Garden">Home & Garden</option>
+                <option value="Books">Books</option>
+                <option value="Toys & Games">Toys & Games</option>
+              </select>
+
+              {/* Unbid Only Checkbox */}
+              <label className="flex items-center gap-1.5 text-xs text-ink-soft cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={unbidOnly}
+                  onChange={(e) => setUnbidOnly(e.target.checked)}
+                  className="rounded border-line text-indigo-600 focus:ring-0"
+                />
+                <span>Unbid Only</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={fetchBiddableItems}
+                className="btn-ghost p-1.5 text-muted hover:text-ink ml-auto"
+                title="Refresh listings"
+              >
+                <RefreshCw size={14} className={biddableLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
+
+          {/* Items Table / Cards */}
+          {biddableLoading ? (
+            <PageLoader />
+          ) : biddableItems.length === 0 ? (
+            <EmptyState
+              icon={Package}
+              title="No listings found"
+              text="No items match your search or filters. Try selecting 'All Items'."
+            />
+          ) : (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-canvas border-b border-line text-[11px] uppercase text-muted font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Listing</th>
+                      <th className="px-4 py-3">Owner & Location</th>
+                      <th className="px-4 py-3">Category & Condition</th>
+                      <th className="px-4 py-3">Bot Bids</th>
+                      <th className="px-4 py-3 text-right">Command Bot Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line/60">
+                    {biddableItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-canvas/50 transition">
+                        {/* Listing */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={
+                                item.image_url ||
+                                'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=200&auto=format&fit=crop&q=60'
+                              }
+                              alt={item.title}
+                              className="h-11 w-11 rounded-xl object-cover border border-line shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-bold text-ink truncate max-w-xs">{item.title}</p>
+                              <p className="text-[11px] text-muted truncate max-w-xs">
+                                {item.description || 'No description'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Owner & Location */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-ink">@{item.owner_username}</span>
+                            {item.owner_is_bot && (
+                              <span className="text-[9px] bg-sky-500/15 text-sky-700 px-1 rounded font-bold">
+                                BOT
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+                            <MapPin size={11} className="text-brand shrink-0" />
+                            <span className="truncate">{item.owner_location || 'Liverpool'}</span>
+                          </p>
+                        </td>
+
+                        {/* Category & Condition */}
+                        <td className="px-4 py-3 text-ink-soft">
+                          <span className="font-medium">{item.category}</span>
+                          <span className="text-muted block text-[10px]">{item.condition}</span>
+                        </td>
+
+                        {/* Bot Bids Count */}
+                        <td className="px-4 py-3">
+                          {Number(item.pending_bot_offers_count) > 0 ? (
+                            <span className="rounded-full bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 text-[10px] border border-indigo-200">
+                              {item.pending_bot_offers_count} Bot offer{item.pending_bot_offers_count > 1 ? 's' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-muted text-[10px]">0 bot offers</span>
+                          )}
+                        </td>
+
+                        {/* Action */}
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBidModalItem(item);
+                              setSelectedBotId('');
+                            }}
+                            className="btn-primary py-1.5 px-3 text-xs font-bold inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700"
+                          >
+                            <Zap size={13} className="fill-white" />
+                            <span>Command Bot Bid</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          ))}
+          )}
         </div>
-      </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* SUB-TAB 2: BOT ACTIVE TRADES & SIMULATOR                          */}
+      {/* ----------------------------------------------------------------- */}
+      {subTab === 'trades' && (
+        <div className="space-y-4">
+          {/* Filter Bar */}
+          <div className="card p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'all', label: 'All Bot Trades' },
+                { id: 'pending', label: 'Pending Offers' },
+                { id: 'accepted', label: 'Accepted (In Chat)' },
+                { id: 'completed', label: 'Completed' },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setTradeStatusFilter(f.id)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                    tradeStatusFilter === f.id
+                      ? 'bg-ink text-white font-bold'
+                      : 'bg-canvas text-ink-soft hover:bg-line/40'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchBotTrades}
+              className="btn-ghost p-1.5 text-muted hover:text-ink"
+              title="Refresh bot trades"
+            >
+              <RefreshCw size={15} className={tradesLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          {/* Bot Trades Stream */}
+          {tradesLoading ? (
+            <PageLoader />
+          ) : botTrades.length === 0 ? (
+            <EmptyState
+              icon={Layers}
+              title="No bot trades found"
+              text="No trades involving bots match the selected filter."
+            />
+          ) : (
+            <div className="space-y-3">
+              {botTrades.map((t) => (
+                <div
+                  key={t.trade_id}
+                  className="card p-4 hover:shadow-xs transition flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  {/* Trade Details */}
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-extrabold text-ink flex items-center gap-1">
+                        @{t.human_username}
+                        <span className="text-[10px] bg-line px-1 rounded text-muted font-normal">
+                          Human
+                        </span>
+                      </span>
+                      <span className="text-muted">⇄</span>
+                      <span className="font-extrabold text-indigo-700 flex items-center gap-1">
+                        @{t.bot_username}
+                        <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1 rounded font-bold">
+                          BOT
+                        </span>
+                      </span>
+                      <span className="text-line">•</span>
+                      <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-bold uppercase border border-line">
+                        {t.status}
+                      </span>
+                      <span className="text-line">•</span>
+                      <span className="text-muted text-[11px]">
+                        {t.created_at ? new Date(t.created_at).toLocaleDateString('en-GB') : ''}
+                      </span>
+                    </div>
+
+                    {/* Items Swapped */}
+                    <div className="flex items-center gap-4 text-xs bg-canvas/60 p-2.5 rounded-xl border border-line/40">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <img
+                          src={t.offered_item_image || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=100'}
+                          alt={t.offered_item_title}
+                          className="h-9 w-9 rounded-lg object-cover border border-line shrink-0"
+                        />
+                        <div className="truncate">
+                          <p className="text-[10px] text-muted">Offered:</p>
+                          <p className="font-bold text-ink truncate">{t.offered_item_title || 'Item'}</p>
+                        </div>
+                      </div>
+
+                      <span className="text-muted font-bold">⇄</span>
+
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <img
+                          src={t.requested_item_image || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=100'}
+                          alt={t.requested_item_title}
+                          className="h-9 w-9 rounded-lg object-cover border border-line shrink-0"
+                        />
+                        <div className="truncate">
+                          <p className="text-[10px] text-muted">Requested:</p>
+                          <p className="font-bold text-ink truncate">{t.requested_item_title || 'Item'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Last Chat Message Excerpt */}
+                    {t.last_message && (
+                      <p className="text-xs text-ink-soft italic truncate pl-1 border-l-2 border-indigo-400">
+                        "{t.last_message}"
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Bot Controls for this Trade */}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-start lg:self-center">
+                    {/* If pending and offer was made to the bot, show Accept as Bot */}
+                    {t.status === 'pending' && (
+                      <button
+                        type="button"
+                        onClick={() => handleBotAcceptTrade(t.trade_id)}
+                        disabled={tradeActionBusyId === t.trade_id}
+                        className="rounded-xl bg-ok text-white hover:bg-ok/90 px-3 py-1.5 text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                        title="Accept trade offer on behalf of the bot"
+                      >
+                        <CheckCheck size={14} /> Accept as Bot
+                      </button>
+                    )}
+
+                    {/* Chat As Bot */}
+                    {t.status === 'accepted' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomMsgTradeId(customMsgTradeId === t.trade_id ? null : t.trade_id);
+                            setCustomMsgText('');
+                          }}
+                          className="rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 text-xs font-bold transition flex items-center gap-1"
+                          title="Speak as this bot in trade chat"
+                        >
+                          <MessageCircle size={14} /> Speak as Bot
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleTriggerScouseReply(t.trade_id)}
+                          disabled={tradeActionBusyId === t.trade_id}
+                          className="rounded-xl bg-canvas hover:bg-line/60 border border-line px-2.5 py-1.5 text-xs font-semibold text-ink transition flex items-center gap-1"
+                          title="Trigger automatic Scouse reply from bot"
+                        >
+                          <Sparkles size={13} className="text-amber-500" /> Scouse Reply
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/trade/${t.trade_id}`)}
+                      className="btn-ghost rounded-xl px-2.5 py-1.5 text-xs font-semibold text-muted hover:text-ink flex items-center gap-1"
+                    >
+                      <ExternalLink size={13} /> View Trade
+                    </button>
+                  </div>
+
+                  {/* Inline Message Input (when Speak as Bot is expanded) */}
+                  {customMsgTradeId === t.trade_id && (
+                    <div className="w-full mt-2 pt-2 border-t border-line flex items-center gap-2">
+                      <input
+                        type="text"
+                        className="field py-1.5 text-xs flex-1"
+                        placeholder={`Type message to send as @${t.bot_username}...`}
+                        value={customMsgText}
+                        onChange={(e) => setCustomMsgText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSendBotMessage(t.trade_id, t.bot_id);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSendBotMessage(t.trade_id, t.bot_id)}
+                        disabled={tradeActionBusyId === t.trade_id || !customMsgText.trim()}
+                        className="btn-primary py-1.5 px-3 text-xs font-bold flex items-center gap-1"
+                      >
+                        <Send size={12} /> Send as Bot
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* SUB-TAB 3: BOT FLEET & ADD INVENTORY                              */}
+      {/* ----------------------------------------------------------------- */}
+      {subTab === 'fleet' && (
+        <div className="space-y-4">
+          <div className="card p-4 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-ink text-sm">Active Merseyside Bot Agents ({bots.length})</h3>
+              <p className="text-xs text-muted">Each bot has authentic local Liverpool neighborhoods and inventory.</p>
+            </div>
+            <button
+              type="button"
+              onClick={loadFleetAndSettings}
+              className="btn-ghost p-1.5 text-muted hover:text-ink"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {bots.map((bot) => (
+              <div
+                key={bot.id}
+                className="card p-4 flex flex-col justify-between hover:shadow-xs transition space-y-3"
+              >
+                <div className="flex items-start gap-3">
+                  <Avatar name={bot.username} size={40} />
+                  <div className="min-w-0">
+                    <p className="font-bold text-ink text-xs truncate">@{bot.username}</p>
+                    <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+                      <MapPin size={11} className="text-brand shrink-0" />
+                      <span className="truncate">{bot.location_name}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-line/60 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/profile/${bot.id}`)}
+                    className="text-[11px] font-semibold text-brand hover:underline"
+                  >
+                    View Closet
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddInventoryModalBot(bot);
+                      setNewItemTitle('');
+                      setNewItemDesc('');
+                      setNewItemImage('');
+                    }}
+                    className="rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 text-[11px] font-bold transition flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add Item
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* MODAL 1: COMMAND BOT BID MODAL                                    */}
+      {/* ----------------------------------------------------------------- */}
+      {bidModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="card max-w-lg w-full p-6 space-y-4 shadow-lift animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-indigo-100 text-indigo-700 p-2">
+                  <Zap size={18} className="fill-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-ink text-base">Command Bot Bid</h3>
+                  <p className="text-xs text-muted">Place offer on another user's item</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBidModalItem(null)}
+                className="text-muted hover:text-ink p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Target Item Preview */}
+            <div className="flex items-center gap-3 bg-canvas p-3 rounded-2xl border border-line">
+              <img
+                src={bidModalItem.image_url || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=200'}
+                alt={bidModalItem.title}
+                className="h-14 w-14 rounded-xl object-cover border border-line shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="font-bold text-ink text-sm truncate">{bidModalItem.title}</p>
+                <p className="text-xs text-muted">
+                  Owner: <span className="font-bold text-ink">@{bidModalItem.owner_username}</span> • {bidModalItem.owner_location}
+                </p>
+                <p className="text-[11px] text-muted">
+                  {bidModalItem.category} • {bidModalItem.condition}
+                </p>
+              </div>
+            </div>
+
+            {/* Choose Bot */}
+            <div className="space-y-3">
+              <div>
+                <label className="label">1. Choose Bidding Bot</label>
+                <select
+                  className="field text-xs"
+                  value={selectedBotId}
+                  onChange={(e) => setSelectedBotId(e.target.value)}
+                >
+                  <option value="">⚡ Random Liverpool Bot (Smart algorithm)</option>
+                  {bots.map((bot) => (
+                    <option key={bot.id} value={bot.id}>
+                      @{bot.username} ({bot.location_name})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Bot Item to Offer */}
+              {selectedBotId && botInventory.length > 0 && (
+                <div>
+                  <label className="label">2. Bot Item to Offer (Optional)</label>
+                  <select
+                    className="field text-xs"
+                    value={selectedBotItemId}
+                    onChange={(e) => setSelectedBotItemId(e.target.value)}
+                  >
+                    <option value="">Auto-pick matching available item</option>
+                    {botInventory.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title} ({item.category} • {item.condition})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
+              <button
+                type="button"
+                onClick={() => setBidModalItem(null)}
+                className="btn-ghost rounded-xl px-4 py-2 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBotBid}
+                disabled={biddingBusy}
+                className="btn-primary rounded-xl px-5 py-2.5 text-xs font-bold flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+              >
+                {biddingBusy ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Zap size={14} className="fill-white" />
+                )}
+                <span>Send Bot Offer Now</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* MODAL 2: ADD ITEM TO BOT INVENTORY MODAL                         */}
+      {/* ----------------------------------------------------------------- */}
+      {addInventoryModalBot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="card max-w-lg w-full p-6 space-y-4 shadow-lift animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div>
+                <h3 className="font-bold text-ink text-base">Add Item to @{addInventoryModalBot.username}</h3>
+                <p className="text-xs text-muted">Expand this bot’s barter wardrobe</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAddInventoryModalBot(null)}
+                className="text-muted hover:text-ink p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Fast Presets */}
+            <div>
+              <p className="text-xs font-bold text-muted uppercase mb-1.5">⚡ 1-Click Fast Presets:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {PRESET_TEMPLATES.map((tmpl) => (
+                  <button
+                    key={tmpl.title}
+                    type="button"
+                    onClick={() => {
+                      setNewItemTitle(tmpl.title);
+                      setNewItemCategory(tmpl.category);
+                      setNewItemCondition(tmpl.condition);
+                      setNewItemImage(tmpl.image);
+                    }}
+                    className="rounded-lg bg-canvas hover:bg-indigo-50 border border-line text-[11px] px-2.5 py-1 text-ink-soft transition"
+                  >
+                    {tmpl.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Item Form */}
+            <form onSubmit={handleCreateBotItem} className="space-y-3">
+              <div>
+                <label className="label">Item Title</label>
+                <input
+                  type="text"
+                  className="field text-xs"
+                  placeholder="e.g. Vintage Leather Jacket"
+                  value={newItemTitle}
+                  onChange={(e) => setNewItemTitle(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Category</label>
+                  <select
+                    className="field text-xs"
+                    value={newItemCategory}
+                    onChange={(e) => setNewItemCategory(e.target.value)}
+                  >
+                    <option value="Collectibles">Collectibles</option>
+                    <option value="Electronics">Electronics</option>
+                    <option value="Clothing">Clothing</option>
+                    <option value="Gaming">Gaming</option>
+                    <option value="Home & Garden">Home & Garden</option>
+                    <option value="Books">Books</option>
+                    <option value="Toys & Games">Toys & Games</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Condition</label>
+                  <select
+                    className="field text-xs"
+                    value={newItemCondition}
+                    onChange={(e) => setNewItemCondition(e.target.value)}
+                  >
+                    <option value="New">New</option>
+                    <option value="Like new">Like new</option>
+                    <option value="Good">Good</option>
+                    <option value="Fair">Fair</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Image URL</label>
+                <input
+                  type="url"
+                  className="field text-xs"
+                  placeholder="https://images.unsplash.com/..."
+                  value={newItemImage}
+                  onChange={(e) => setNewItemImage(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setAddInventoryModalBot(null)}
+                  className="btn-ghost rounded-xl px-4 py-2 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addItemBusy || !newItemTitle.trim()}
+                  className="btn-primary rounded-xl px-5 py-2.5 text-xs font-bold flex items-center gap-1.5"
+                >
+                  {addItemBusy ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+                  <span>Save Item to Bot</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
