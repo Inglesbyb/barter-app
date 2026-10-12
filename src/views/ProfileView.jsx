@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft, ShieldAlert, Cookie } from 'lucide-react';
-import { supabase, unwrap, getProfileStats, deleteMyAccount } from '../lib/supabase';
+import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft, ShieldAlert, Cookie, Zap } from 'lucide-react';
+import { supabase, unwrap, getProfileStats, deleteMyAccount, adminToggleBanUser, adminDeleteUser } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import { getCurrentPosition, POPULAR_LOCATIONS } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
@@ -10,7 +10,7 @@ import TradeOfferModal from '../components/TradeOfferModal';
 import { Avatar, BackButton, EmptyState, ErrorBox, ItemImage, PageLoader, Spinner, Stars } from '../components/ui';
 
 export default function ProfileView({ userId }) {
-  const { session, showToast, setProfile, openLegal } = useApp();
+  const { session, showToast, setProfile, openLegal, adminMode, toggleAdminMode, isAdmin } = useApp();
   const currentUserId = session.user.id;
   const targetId = userId || currentUserId;
   const isMine = targetId === currentUserId;
@@ -177,6 +177,101 @@ export default function ProfileView({ userId }) {
 
         {profile.bio && (
           <p className="mt-4 whitespace-pre-line text-sm text-ink-soft">{profile.bio}</p>
+        )}
+
+        {/* Founder Admin Controls Card (On Founder's Own Profile) */}
+        {isMine && isAdmin && (
+          <div className="mt-5 rounded-2xl bg-linear-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 border border-amber-500/30">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-amber-500 p-2 text-white shadow-xs">
+                  <Zap size={18} className="fill-white" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-ink flex items-center gap-1.5">
+                    <span>Founder Admin Controls</span>
+                    <span className="rounded bg-amber-500/20 text-amber-800 px-1.5 py-0.2 text-[10px] font-black uppercase">
+                      Active
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-muted">
+                    {adminMode
+                      ? 'Admin Mode is ON. Moderation tools & inspection active.'
+                      : 'Normal Trader View is ON. You experience the app as standard users do.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  id="profile-toggle-admin-btn"
+                  onClick={toggleAdminMode}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs border ${
+                    adminMode
+                      ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600'
+                      : 'bg-white text-ink border-line hover:bg-canvas'
+                  }`}
+                >
+                  <span>Admin Mode:</span>
+                  <span className="font-black uppercase">{adminMode ? 'ON' : 'OFF'}</span>
+                </button>
+                <button
+                  type="button"
+                  id="profile-open-mission-control-btn"
+                  onClick={() => navigate('/admin')}
+                  className="btn-primary py-1.5 px-3 text-xs"
+                >
+                  Mission Control ➔
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Moderator Actions on Other Users' Profiles (Founder Only when Admin Mode is ON) */}
+        {!isMine && isAdmin && adminMode && (
+          <div className="mt-5 rounded-2xl bg-bad-soft/40 p-4 border border-bad/30">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <ShieldAlert size={20} className="text-bad" />
+                <div>
+                  <p className="text-xs font-bold text-ink">Moderator Actions for @{profile.username}</p>
+                  <p className="text-[11px] text-muted">
+                    Status: {profile.is_banned ? 'BLOCKED / BANNED' : 'Active Trader'} • {profile.is_bot ? 'Liverpool Bot' : 'Human Account'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const newBan = !profile.is_banned;
+                    await adminToggleBanUser(profile.id, newBan);
+                    showToast(newBan ? `Blocked @${profile.username}` : `Unblocked @${profile.username}`);
+                    reload();
+                  }}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                    profile.is_banned ? 'bg-ok text-white hover:bg-ok/90' : 'bg-bad text-white hover:bg-bad/90'
+                  }`}
+                >
+                  {profile.is_banned ? 'Unblock User' : 'Block / Ban User'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = window.confirm(`Permanently delete @${profile.username} and all their listings & chats?`);
+                    if (!ok) return;
+                    await adminDeleteUser(profile.id);
+                    showToast(`Deleted @${profile.username}`);
+                    navigate('/');
+                  }}
+                  className="rounded-xl bg-canvas border border-line px-3 py-1.5 text-xs font-bold text-bad hover:bg-bad-soft transition"
+                >
+                  Delete User
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Stats Row with interactive quick-filter clicks */}

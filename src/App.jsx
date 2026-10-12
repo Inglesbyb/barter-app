@@ -17,6 +17,7 @@ import OfferSwipeView from './views/OfferSwipeView';
 import TradeDetailView from './views/TradeDetailView';
 import ProfileView from './views/ProfileView';
 import ExploreView from './views/ExploreView';
+import AdminView from './views/AdminView';
 import NotificationBanner from './components/NotificationBanner';
 import CookieBanner from './components/CookieBanner';
 import LegalModal from './components/LegalModal';
@@ -32,6 +33,24 @@ export default function App() {
   const [incomingNotifs, setIncomingNotifs] = useState([]);
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState('privacy');
+  const [adminMode, setAdminMode] = useState(() => {
+    try {
+      return localStorage.getItem('switchr_admin_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleAdminMode = useCallback(() => {
+    setAdminMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('switchr_admin_mode', String(next));
+      } catch {}
+      showToast(next ? '⚡ Admin Mode activated' : '🌿 Switched to Normal View', 'info');
+      return next;
+    });
+  }, [showToast]);
 
   const openLegal = useCallback((tab = 'privacy') => {
     setLegalTab(tab);
@@ -324,12 +343,62 @@ export default function App() {
     if (root === 'me') {
       return <ProfileView userId={session.user.id} />;
     }
+    if (root === 'admin') {
+      return <AdminView />;
+    }
     return <FeedView />;
   };
 
+  const isAdmin = Boolean(profile?.is_admin);
+  const isEffectiveAdminMode = Boolean(isAdmin && adminMode);
+
   return (
-    <AppContext.Provider value={{ session, profile, setProfile, showToast, openLegal }}>
+    <AppContext.Provider
+      value={{
+        session,
+        profile,
+        setProfile,
+        showToast,
+        openLegal,
+        adminMode: isEffectiveAdminMode,
+        toggleAdminMode,
+        isAdmin,
+      }}
+    >
       <div className="min-h-dvh flex flex-col">
+        {/* Top Sticky Admin Indicator Bar (Only visible when Admin Mode is ON) */}
+        {isEffectiveAdminMode && (
+          <div className="bg-linear-to-r from-amber-500 via-amber-400 to-amber-500 text-ink px-4 py-1.5 text-xs font-bold shadow-xs sticky top-0 z-50 border-b border-amber-600/20">
+            <div className="mx-auto max-w-6xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-600 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                </span>
+                <span className="tracking-wide">
+                  ⚡ ADMIN MODE ACTIVE — Founder Moderation Suite Enabled
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin')}
+                  className="rounded-lg bg-black/10 hover:bg-black/20 px-2.5 py-1 text-[11px] font-bold text-ink transition inline-flex items-center gap-1"
+                >
+                  Mission Control ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleAdminMode}
+                  className="rounded-lg bg-black text-white hover:bg-slate-800 px-2.5 py-1 text-[11px] font-bold transition shadow-xs"
+                >
+                  🌿 Switch to Normal View
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <Navbar currentPath={path} />
 
         <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 pb-28 sm:pb-14">

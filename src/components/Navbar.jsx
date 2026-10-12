@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Compass, Flame, ArrowRightLeft, Plus, User, Bell } from 'lucide-react';
+import { Compass, Flame, ArrowRightLeft, Plus, User, Bell, ShieldAlert } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { navigate, useApp } from '../lib/core';
 import { 
@@ -15,8 +15,9 @@ import { Avatar } from './ui';
 import { Logo } from '../views/AuthView';
 
 export default function Navbar({ currentPath }) {
-  const { session, profile } = useApp();
+  const { session, profile, adminMode, toggleAdminMode } = useApp();
   const userId = session?.user?.id;
+  const isFounderAdmin = Boolean(profile?.is_admin);
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
@@ -123,6 +124,9 @@ export default function Navbar({ currentPath }) {
     },
     { label: 'List Item', path: '/new', icon: Plus, isAction: true, id: 'nav-list' },
     { label: 'Profile', path: '/me', icon: User, id: 'nav-profile' },
+    ...(isFounderAdmin && adminMode
+      ? [{ label: 'Admin', path: '/admin', icon: ShieldAlert, id: 'nav-admin' }]
+      : []),
   ];
 
   const isCurrent = (p) => {
@@ -189,6 +193,21 @@ export default function Navbar({ currentPath }) {
                 )}
               </button>
 
+              {isFounderAdmin && adminMode && (
+                <button
+                  type="button"
+                  id="nav-desktop-admin"
+                  onClick={() => navigate('/admin')}
+                  className={`btn-ghost rounded-xl px-3.5 py-2 text-sm font-bold ${
+                    isCurrent('/admin')
+                      ? 'bg-amber-500/15 text-amber-700'
+                      : 'text-amber-600 hover:bg-amber-500/10'
+                  }`}
+                >
+                  <ShieldAlert size={17} className="text-amber-600" /> Admin
+                </button>
+              )}
+
               <button
                 type="button"
                 id="nav-desktop-list"
@@ -198,6 +217,31 @@ export default function Navbar({ currentPath }) {
                 <Plus size={16} strokeWidth={2.5} /> List item
               </button>
             </nav>
+
+            {/* Admin Mode Toggle Switch (Founder Only) */}
+            {isFounderAdmin && (
+              <button
+                type="button"
+                id="nav-admin-toggle-btn"
+                onClick={toggleAdminMode}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                  adminMode
+                    ? 'bg-amber-500/15 text-amber-900 border-amber-500/40 hover:bg-amber-500/25'
+                    : 'bg-canvas text-ink-soft border-line hover:text-ink hover:bg-white'
+                }`}
+                title="Switch between Normal Trader View and Admin Mode"
+              >
+                <ShieldAlert size={14} className={adminMode ? 'text-amber-600 animate-pulse' : 'text-muted'} />
+                <span className="hidden lg:inline">Admin Mode:</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                    adminMode ? 'bg-amber-500 text-white' : 'bg-line text-muted'
+                  }`}
+                >
+                  {adminMode ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            )}
 
             {/* Notification Bell (Both Desktop & Mobile) */}
             <button

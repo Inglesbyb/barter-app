@@ -53,3 +53,80 @@ export async function deleteMyAccount() {
   await supabase.auth.signOut();
 }
 
+// -----------------------------------------------------------------------------
+// Admin & Moderation Helpers (Restricted to Founder / Admin Role)
+// -----------------------------------------------------------------------------
+export async function adminGetUsers({ search = '', filter = 'all', limit = 100, offset = 0 } = {}) {
+  return unwrap(
+    await supabase.rpc('admin_get_users', {
+      p_search: search,
+      p_filter: filter,
+      p_limit: limit,
+      p_offset: offset,
+    }),
+  );
+}
+
+export async function adminToggleBanUser(userId, banned) {
+  return unwrap(
+    await supabase.rpc('admin_toggle_ban_user', {
+      p_user_id: userId,
+      p_banned: banned,
+    }),
+  );
+}
+
+export async function adminDeleteUser(userId) {
+  return unwrap(
+    await supabase.rpc('admin_delete_user', {
+      p_user_id: userId,
+    }),
+  );
+}
+
+export async function adminGetAllMessages({ search = '', limit = 100, offset = 0 } = {}) {
+  return unwrap(
+    await supabase.rpc('admin_get_all_messages', {
+      p_search: search,
+      p_limit: limit,
+      p_offset: offset,
+    }),
+  );
+}
+
+export async function adminDeleteMessage(messageId) {
+  return unwrap(
+    await supabase.rpc('admin_delete_message', {
+      p_message_id: messageId,
+    }),
+  );
+}
+
+export async function adminGetAllMedia({ limit = 150, offset = 0 } = {}) {
+  return unwrap(
+    await supabase.rpc('admin_get_all_media', {
+      p_limit: limit,
+      p_offset: offset,
+    }),
+  );
+}
+
+export async function adminRemoveMedia(mediaType, mediaId) {
+  return unwrap(
+    await supabase.rpc('admin_remove_media', {
+      p_media_type: mediaType,
+      p_media_id: mediaId,
+    }),
+  );
+}
+
+export async function adminTriggerBotBid(targetItemId, botId = null) {
+  return unwrap(
+    await supabase.rpc('bot_bid_on_item', {
+      p_target_item_id: targetItemId,
+      p_bot_id: botId,
+    }),
+  );
+}
+
+
