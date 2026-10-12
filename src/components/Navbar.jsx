@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Compass, Flame, ArrowRightLeft, Plus, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { navigate, useApp } from '../lib/core';
+import { getUnreadTradeCount, subscribeToUnreadChanges } from '../lib/notifications';
 import { Avatar } from './ui';
 import { Logo } from '../views/AuthView';
 
@@ -9,8 +10,9 @@ export default function Navbar({ currentPath }) {
   const { session, profile } = useApp();
   const userId = session?.user?.id;
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
 
-  // Live count of pending offers waiting for the current user
+  // Live count of pending offers waiting for the current user and unread messages
   useEffect(() => {
     if (!userId || !supabase) return;
 
@@ -23,22 +25,46 @@ export default function Navbar({ currentPath }) {
       setPendingCount(count || 0);
     };
 
+    const fetchUnreadMessages = async () => {
+      const count = await getUnreadTradeCount(userId);
+      setUnreadMsgCount(count);
+    };
+
     fetchPending();
+    fetchUnreadMessages();
 
     // Listen for new trades targeting current user
     const channel = supabase
       .channel('navbar-trades-count')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'trades', filter: `receiver_id=eq.${userId}` },
-        () => fetchPending(),
+        { event: '*', schema: 'public', table: 'trades' },
+        () => {
+          fetchPending();
+          fetchUnreadMessages();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        () => {
+          fetchUnreadMessages();
+        },
       )
       .subscribe();
 
+    // Also listen to internal read/unread state changes
+    const unsubUnread = subscribeToUnreadChanges(() => {
+      fetchUnreadMessages();
+    });
+
     return () => {
       supabase.removeChannel(channel);
+      unsubUnread();
     };
   }, [userId]);
+
+  const totalBadge = pendingCount + unreadMsgCount;
 
   const navItems = [
     { label: 'Browse', path: '/', icon: Compass, id: 'nav-browse' },
@@ -47,7 +73,7 @@ export default function Navbar({ currentPath }) {
       label: 'Trades',
       path: '/trades',
       icon: ArrowRightLeft,
-      badge: pendingCount,
+      badge: totalBadge,
       id: 'nav-trades',
     },
     { label: 'List Item', path: '/new', icon: Plus, isAction: true, id: 'nav-list' },
@@ -104,9 +130,14 @@ export default function Navbar({ currentPath }) {
               }`}
             >
               <ArrowRightLeft size={17} /> Trades
-              {pendingCount > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white shadow-sm">
-                  {pendingCount}
+              {totalBadge > 0 && (
+                <span
+                  className={`flex h-5 min-w-5 items-center justify-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white shadow-sm ${
+                    unreadMsgCount > 0 ? 'animate-pulse' : ''
+                  }`}
+                  title={`${pendingCount} pending offers, ${unreadMsgCount} unread messages`}
+                >
+                  {totalBadge}
                 </span>
               )}
             </button>

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, ChevronRight, Inbox, Send, MessagesSquare, History, Star } from 'lucide-react';
+import { ArrowRight, ChevronRight, Inbox, Send, MessagesSquare, History, Star, MessageSquare } from 'lucide-react';
 import { supabase, unwrap, TRADE_SELECT } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
+import { getTradeLastRead, subscribeToUnreadChanges } from '../lib/notifications';
 import { EmptyState, ErrorBox, ItemImage, PageLoader, PageTitle, StatusBadge } from '../components/ui';
 
 const TABS = [
@@ -27,8 +28,37 @@ export default function TradesView({ initialTab = 'received' }) {
         .then(unwrap),
       supabase.from('reviews').select('trade_id').eq('rater_id', me).then(unwrap),
     ]);
-    return { trades, reviewed: new Set(myReviews.map((r) => r.trade_id)) };
+
+    const activeTrades = (trades || []).filter((t) => t.status === 'accepted');
+    const unreadTradeIds = new Set();
+    if (activeTrades.length > 0) {
+      await Promise.all(
+        activeTrades.map(async (t) => {
+          const lastRead = getTradeLastRead(t.id);
+          let q = supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('trade_id', t.id)
+            .neq('sender_id', me);
+          if (lastRead) {
+            q = q.gt('created_at', lastRead);
+          }
+          const { count } = await q;
+          if (count && count > 0) {
+            unreadTradeIds.add(t.id);
+          }
+        }),
+      );
+    }
+
+    return { trades, reviewed: new Set(myReviews.map((r) => r.trade_id)), unreadTradeIds };
   });
+
+  useEffect(() => {
+    return subscribeToUnreadChanges(() => {
+      reload();
+    });
+  }, [reload]);
 
   if (loading) return <PageLoader />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
@@ -71,16 +101,27 @@ export default function TradesView({ initialTab = 'received' }) {
       <PageTitle title="Trades" subtitle="Your offers, active swaps and history." />
 
       <div className="no-scrollbar -mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" id={`trades-tab-${id}`} onClick={() => changeTab(id)} className={tab === id ? 'chip-on' : 'chip-off'}>
-            <Icon size={15} /> {label}
-            {counts[id] > 0 && (
-              <span className={`ml-0.5 rounded-full px-1.5 text-xs ${tab === id ? 'bg-white/25' : 'bg-brand-soft text-brand'}`}>
-                {counts[id]}
-              </span>
-            )}
-          </button>
-        ))}
+        {TABS.map(({ id, label, icon: Icon }) => {
+          const isUnreadTab = id === 'active' && data?.unreadTradeIds?.size > 0;
+          return (
+            <button key={id} type="button" id={`trades-tab-${id}`} onClick={() => changeTab(id)} className={tab === id ? 'chip-on' : 'chip-off'}>
+              <Icon size={15} /> {label}
+              {counts[id] > 0 && (
+                <span
+                  className={`ml-0.5 rounded-full px-1.5 text-xs ${
+                    tab === id
+                      ? 'bg-white/25'
+                      : isUnreadTab
+                      ? 'bg-emerald-600 text-white font-bold animate-pulse'
+                      : 'bg-brand-soft text-brand'
+                  }`}
+                >
+                  {counts[id]}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
@@ -140,15 +181,24 @@ export default function TradesView({ initialTab = 'received' }) {
             active.map((t) => {
               const iConfirmed = t.initiator_id === me ? t.initiator_confirmed : t.receiver_confirmed;
               const theyConfirmed = t.initiator_id === me ? t.receiver_confirmed : t.initiator_confirmed;
+              const hasUnread = data?.unreadTradeIds?.has(t.id);
               return (
                 <TradeRow key={t.id} trade={t} me={me}>
-                  {theyConfirmed && !iConfirmed ? (
-                    <span className="badge bg-coral-soft text-coral">Confirm swap</span>
-                  ) : iConfirmed ? (
-                    <span className="badge bg-ink/5 text-ink-soft">Waiting</span>
-                  ) : (
-                    <span className="badge bg-ok-soft text-ok">Chat</span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {hasUnread && (
+                      <span className="badge flex items-center gap-1 bg-emerald-100 text-emerald-800 ring-1 ring-emerald-600/30 text-xs font-semibold animate-pulse">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                        New message
+                      </span>
+                    )}
+                    {theyConfirmed && !iConfirmed ? (
+                      <span className="badge bg-coral-soft text-coral">Confirm swap</span>
+                    ) : iConfirmed ? (
+                      <span className="badge bg-ink/5 text-ink-soft">Waiting</span>
+                    ) : (
+                      <span className="badge bg-ok-soft text-ok">Chat</span>
+                    )}
+                  </div>
                 </TradeRow>
               );
             })

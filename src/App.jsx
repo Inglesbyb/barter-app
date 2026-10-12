@@ -17,6 +17,9 @@ import OfferSwipeView from './views/OfferSwipeView';
 import TradeDetailView from './views/TradeDetailView';
 import ProfileView from './views/ProfileView';
 import ExploreView from './views/ExploreView';
+import NotificationBanner from './components/NotificationBanner';
+import { playMessageSound, playTradeAlertSound, showBrowserNotification, markTradeAsRead } from './lib/notifications';
+import { navigate } from './lib/core';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -24,6 +27,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isRecovery, setIsRecovery] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [incomingNotifs, setIncomingNotifs] = useState([]);
 
   const { path, parts } = useRoute();
 
@@ -83,6 +87,112 @@ export default function App() {
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
+
+  // Global Realtime listener for incoming messages and trade updates
+  useEffect(() => {
+    if (!session?.user?.id || !supabase) return;
+    const myId = session.user.id;
+
+    const channel = supabase
+      .channel('switchr-global-notifications')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        async ({ new: msg }) => {
+          if (!msg || msg.sender_id === myId) return;
+
+          const currentHash = window.location.hash || '';
+          const isViewingThisTrade = currentHash === `#/trade/${msg.trade_id}`;
+          const isVisible = typeof document !== 'undefined' && !document.hidden;
+
+          // If the user has this trade chat open right now and tab is focused, let TradeDetailView handle it
+          if (isViewingThisTrade && isVisible) {
+            return;
+          }
+
+          // Fetch sender username for the alert
+          const { data: sender } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', msg.sender_id)
+            .maybeSingle();
+
+          const senderUsername = sender?.username || 'Trader';
+
+          // Play synthesized incoming message sound chime
+          playMessageSound();
+
+          // Trigger in-app notification banner
+          const notifId = crypto.randomUUID();
+          setIncomingNotifs((prev) => [
+            {
+              id: notifId,
+              tradeId: msg.trade_id,
+              senderUsername,
+              content: msg.content,
+              hasImage: !!msg.image_url,
+            },
+            ...prev.filter((n) => n.tradeId !== msg.trade_id).slice(0, 2),
+          ]);
+
+          // Auto-dismiss after 6.5 seconds
+          setTimeout(() => {
+            setIncomingNotifs((prev) => prev.filter((n) => n.id !== notifId));
+          }, 6500);
+
+          // Browser OS / Desktop Push Notification
+          showBrowserNotification(
+            `@${senderUsername} on SwitchR`,
+            msg.content || (msg.image_url ? '📷 Sent a photo' : 'Sent you a message'),
+            () => {
+              markTradeAsRead(msg.trade_id);
+              navigate(`/trade/${msg.trade_id}`);
+            },
+          );
+
+          // Dispatch event to update unread badge on Navbar and TradesView
+          window.dispatchEvent(
+            new CustomEvent('switchr:unread-change', { detail: { tradeId: msg.trade_id } }),
+          );
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'trades' },
+        async ({ new: trade, old: prevTrade }) => {
+          if (!trade || (trade.initiator_id !== myId && trade.receiver_id !== myId)) return;
+          const partnerId = trade.initiator_id === myId ? trade.receiver_id : trade.initiator_id;
+
+          // Offer accepted notification
+          if (trade.status === 'accepted' && prevTrade?.status === 'pending') {
+            playTradeAlertSound();
+            const { data: partner } = await supabase
+              .from('profiles')
+              .select('username')
+              .eq('id', partnerId)
+              .maybeSingle();
+            showToast(
+              `🎉 Offer accepted by @${partner?.username || 'trader'}! Trade chat is open.`,
+              'success',
+            );
+            window.dispatchEvent(
+              new CustomEvent('switchr:unread-change', { detail: { tradeId: trade.id } }),
+            );
+          }
+
+          // Trade completed notification
+          if (trade.status === 'completed' && prevTrade?.status !== 'completed') {
+            playTradeAlertSound();
+            showToast('🏆 Swap completed! Don\'t forget to leave a rating.', 'success');
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, showToast]);
 
   // If Supabase credentials are missing or still placeholder
   if (!isSupabaseConfigured) {
@@ -149,6 +259,12 @@ export default function App() {
             {renderRoute()}
           </ErrorBoundary>
         </main>
+
+        {/* Interactive Floating Incoming Message Notification Banner */}
+        <NotificationBanner
+          notifications={incomingNotifs}
+          onDismiss={(id) => setIncomingNotifs((prev) => prev.filter((n) => n.id !== id))}
+        />
 
         {/* Global Toast Container */}
         <div className="fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 flex-col gap-2 pointer-events-none sm:bottom-6">

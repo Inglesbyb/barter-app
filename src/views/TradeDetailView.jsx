@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRightLeft, Check, CheckCircle2, Clock, Image as ImageIcon, Lock, PartyPopper, Send, Sparkles, X, XCircle } from 'lucide-react';
+import { ArrowRightLeft, Bell, Check, CheckCircle2, Clock, Image as ImageIcon, Lock, PartyPopper, Send, Sparkles, Volume2, VolumeX, X, XCircle } from 'lucide-react';
 import { supabase, unwrap, uploadChatImage, TRADE_SELECT } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
+import { playMessageSound, showBrowserNotification, markTradeAsRead, getNotificationPermission, requestNotificationPermission, isSoundMuted, toggleSoundMuted } from '../lib/notifications';
 import ReviewModal from '../components/ReviewModal';
 import { Avatar, BackButton, ErrorBox, ItemImage, PageLoader, Spinner, Stars, StatusBadge } from '../components/ui';
 
 export default function TradeDetailView({ tradeId }) {
-  const { session } = useApp();
+  const { session, showToast } = useApp();
 
   const { data, loading, error, reload } = useQuery(async () => {
     const [trade, messages, myReview] = await Promise.all([
@@ -54,14 +55,32 @@ function TradeRoom({ initial, reload }) {
   const theyConfirmed = iAmInitiator ? trade.receiver_confirmed : trade.initiator_confirmed;
   const chatOpen = trade.status === 'accepted';
 
+  const [muted, setMuted] = useState(isSoundMuted());
+  const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
+
   // Live updates: new messages + trade status changes.
   useEffect(() => {
+    markTradeAsRead(trade.id);
+
     const channel = supabase
       .channel(`trade-${trade.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `trade_id=eq.${trade.id}` },
-        ({ new: msg }) => setMessages((list) => (list.some((m) => m.id === msg.id) ? list : [...list, msg])),
+        ({ new: msg }) => {
+          setMessages((list) => (list.some((m) => m.id === msg.id) ? list : [...list, msg]));
+          if (msg.sender_id !== me) {
+            playMessageSound();
+            markTradeAsRead(trade.id);
+            if (typeof document !== 'undefined' && document.hidden) {
+              showBrowserNotification(
+                `@${partner.username} on SwitchR`,
+                msg.content || (msg.image_url ? '📷 Sent a photo' : 'New message'),
+                () => window.focus(),
+              );
+            }
+          }
+        },
       )
       .on(
         'postgres_changes',
@@ -75,11 +94,32 @@ function TradeRoom({ initial, reload }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [trade.id]);
+  }, [trade.id, me, partner?.username]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages.length, partnerTyping]);
+
+  const handleToggleSound = () => {
+    const isNowMuted = toggleSoundMuted();
+    setMuted(isNowMuted);
+    showToast(isNowMuted ? 'Sound chime muted' : 'Sound chime enabled', 'info');
+    if (!isNowMuted) playMessageSound();
+  };
+
+  const handleEnableDesktopNotifs = async () => {
+    const perm = await requestNotificationPermission();
+    setNotifPerm(perm);
+    if (perm === 'granted') {
+      showToast('Desktop notifications enabled!', 'success');
+      showBrowserNotification(
+        'SwitchR notifications active',
+        'You will receive alerts when traders message you.',
+      );
+    } else if (perm === 'denied') {
+      showToast('Notifications are blocked by browser settings', 'error');
+    }
+  };
 
   const run = async (fn, successMsg) => {
     setBusy(true);
@@ -250,9 +290,41 @@ function TradeRoom({ initial, reload }) {
 
         {/* ---------------- Chat ---------------- */}
         <section className="card flex h-[65dvh] min-h-[420px] flex-col overflow-hidden lg:h-[calc(100dvh-10rem)]">
-          <div className="border-b border-line px-5 py-3.5">
-            <h2 className="font-display font-semibold">Trade chat</h2>
-            <p className="text-xs text-muted">Agree where, when and how to swap.</p>
+          <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+            <div>
+              <h2 className="font-display font-semibold">Trade chat</h2>
+              <p className="text-xs text-muted">Agree where, when and how to swap.</p>
+            </div>
+            {/* Notification and Audio Controls */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                id="trade-toggle-sound-btn"
+                onClick={handleToggleSound}
+                className="btn-ghost rounded-xl p-2 text-muted transition hover:bg-canvas hover:text-ink"
+                title={muted ? 'Notification chime muted (click to unmute)' : 'Notification chime enabled (click to mute)'}
+                aria-label={muted ? 'Unmute chime' : 'Mute chime'}
+              >
+                {muted ? (
+                  <VolumeX size={17} className="text-muted" />
+                ) : (
+                  <Volume2 size={17} className="text-brand" />
+                )}
+              </button>
+
+              {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
+                <button
+                  type="button"
+                  id="trade-enable-desktop-notif-btn"
+                  onClick={handleEnableDesktopNotifs}
+                  className="flex items-center gap-1.5 rounded-xl border border-line bg-canvas px-2.5 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand/40 hover:text-brand"
+                  title="Enable desktop notifications"
+                >
+                  <Bell size={13} className="text-brand" />
+                  <span className="hidden sm:inline">Desktop alerts</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 space-y-2 overflow-y-auto bg-canvas/60 px-4 py-4">
