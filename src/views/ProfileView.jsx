@@ -16,6 +16,7 @@ export default function ProfileView({ userId }) {
   const isMine = targetId === currentUserId;
 
   const [activeTab, setActiveTab] = useState('items'); // 'items' | 'reviews' | 'shortlist'
+  const [itemFilter, setItemFilter] = useState('all'); // 'all' | 'listed' | 'offered' | 'traded'
   const [editOpen, setEditOpen] = useState(false);
   const [savedItems, setSavedItems] = useState([]);
   const [tradeTargetItem, setTradeTargetItem] = useState(null);
@@ -46,7 +47,7 @@ export default function ProfileView({ userId }) {
       return [];
     };
 
-    const [profile, stats, items, reviews, savedList] = await Promise.all([
+    const [profile, stats, items, reviews, savedList, activeTrades] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', targetId).maybeSingle().then(unwrap),
       getProfileStats(targetId),
       supabase
@@ -62,20 +63,48 @@ export default function ProfileView({ userId }) {
         .order('created_at', { ascending: false })
         .then(unwrap),
       fetchSaved(),
+      supabase
+        .from('trades')
+        .select('id, status, offered_item_id, requested_item_id, initiator_id, receiver_id')
+        .in('status', ['pending', 'accepted'])
+        .or(`initiator_id.eq.${targetId},receiver_id.eq.${targetId}`)
+        .then(unwrap)
+        .catch(() => []),
     ]);
 
     if (!profile) throw new Error('Profile not found.');
     setSavedItems(savedList || []);
-    return { profile, stats, items, reviews, savedList: savedList || [] };
+    return { profile, stats, items, reviews, savedList: savedList || [], activeTrades: activeTrades || [] };
   }, [targetId]);
 
   if (loading) return <PageLoader />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
 
-  const { profile, stats, items, reviews } = data;
-  const availableItems = items.filter((i) => i.status === 'available');
+  const { profile, stats, items, reviews, activeTrades } = data;
+
+  const pendingOfferedIds = new Set(
+    (activeTrades || [])
+      .filter((t) => t.initiator_id === targetId && t.status === 'pending')
+      .map((t) => t.offered_item_id),
+  );
+  const inTradeIds = new Set(
+    (activeTrades || [])
+      .filter((t) => t.status === 'accepted')
+      .flatMap((t) => [t.offered_item_id, t.requested_item_id]),
+  );
+
+  const availableItems = items.filter(
+    (i) => i.status === 'available' && !pendingOfferedIds.has(i.id) && !inTradeIds.has(i.id),
+  );
+  const offeredItems = items.filter(
+    (i) => i.status === 'in_trade' || pendingOfferedIds.has(i.id) || inTradeIds.has(i.id),
+  );
   const tradedItems = items.filter((i) => i.status === 'traded');
-  const displayItems = isMine ? items : availableItems;
+
+  let currentItems = isMine ? items : availableItems;
+  if (itemFilter === 'listed') currentItems = availableItems;
+  else if (itemFilter === 'offered') currentItems = offeredItems;
+  else if (itemFilter === 'traded') currentItems = tradedItems;
 
   const handleRemoveSaved = async (item) => {
     try {
@@ -150,27 +179,48 @@ export default function ProfileView({ userId }) {
           <p className="mt-4 whitespace-pre-line text-sm text-ink-soft">{profile.bio}</p>
         )}
 
-        {/* Stats Row */}
+        {/* Stats Row with interactive quick-filter clicks */}
         <div className="mt-6 grid grid-cols-3 divide-x divide-line rounded-2xl bg-canvas p-4 text-center">
-          <div>
-            <p className="font-display text-xl font-bold text-ink sm:text-2xl">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('items');
+              setItemFilter('traded');
+            }}
+            className="group cursor-pointer transition hover:opacity-85 text-center"
+            title="View traded items"
+          >
+            <p className="font-display text-xl font-bold text-ink sm:text-2xl group-hover:text-brand">
               {stats.tradesCompleted}
             </p>
-            <p className="text-xs text-muted">Trades done</p>
-          </div>
-          <div>
-            <div className="flex items-center justify-center gap-1 font-display text-xl font-bold text-ink sm:text-2xl">
+            <p className="text-xs text-muted group-hover:text-brand">Trades done</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('reviews')}
+            className="group cursor-pointer transition hover:opacity-85 text-center"
+            title="View reviews"
+          >
+            <div className="flex items-center justify-center gap-1 font-display text-xl font-bold text-ink sm:text-2xl group-hover:text-brand">
               <Star size={18} className="fill-warn text-warn" />
               {stats.avgRating ? stats.avgRating.toFixed(1) : '—'}
             </div>
-            <p className="text-xs text-muted">{stats.reviewCount} rating{stats.reviewCount !== 1 ? 's' : ''}</p>
-          </div>
-          <div>
-            <p className="font-display text-xl font-bold text-ink sm:text-2xl">
+            <p className="text-xs text-muted group-hover:text-brand">{stats.reviewCount} rating{stats.reviewCount !== 1 ? 's' : ''}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('items');
+              setItemFilter('listed');
+            }}
+            className="group cursor-pointer transition hover:opacity-85 text-center"
+            title="View listed items"
+          >
+            <p className="font-display text-xl font-bold text-ink sm:text-2xl group-hover:text-brand">
               {availableItems.length}
             </p>
-            <p className="text-xs text-muted">Available</p>
-          </div>
+            <p className="text-xs text-muted group-hover:text-brand">Available</p>
+          </button>
         </div>
       </div>
 
@@ -186,7 +236,7 @@ export default function ProfileView({ userId }) {
               : 'border-transparent text-muted hover:text-ink'
           }`}
         >
-          <Package size={17} /> Items ({displayItems.length})
+          <Package size={17} /> Items ({isMine ? items.length : availableItems.length})
         </button>
         <button
           type="button"
@@ -219,41 +269,142 @@ export default function ProfileView({ userId }) {
       {/* Tab Contents */}
       <div className="mt-6">
         {activeTab === 'items' ? (
-          displayItems.length === 0 ? (
-            <EmptyState
-              icon={PackageSearch}
-              title={isMine ? "You haven't listed anything yet" : 'No available items'}
-              text={
-                isMine
-                  ? 'List something you would like to swap with the community.'
-                  : `@${profile.username} has no items available right now.`
-              }
-              action={
-                isMine && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => navigate('/new')}
-                  >
-                    <Plus size={16} /> List an item
-                  </button>
-                )
-              }
-            />
-          ) : (
-            <div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-                {displayItems.map((item, i) => (
-                  <ItemCard key={item.id} item={item} showStatus={isMine} index={i} />
-                ))}
+          <div>
+            {/* Segmented Filter Pills separating Listed, Offered, and Traded */}
+            {isMine && items.length > 0 && (
+              <div className="mb-6 flex flex-wrap items-center gap-1.5 rounded-2xl bg-canvas p-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  id="profile-filter-all"
+                  onClick={() => setItemFilter('all')}
+                  className={`cursor-pointer rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${
+                    itemFilter === 'all'
+                      ? 'bg-white text-ink shadow-xs ring-1 ring-line/50'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  All ({items.length})
+                </button>
+                <button
+                  type="button"
+                  id="profile-filter-listed"
+                  onClick={() => setItemFilter('listed')}
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${
+                    itemFilter === 'listed'
+                      ? 'bg-white text-emerald-700 shadow-xs ring-1 ring-emerald-600/20'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Listed ({availableItems.length})
+                </button>
+                <button
+                  type="button"
+                  id="profile-filter-offered"
+                  onClick={() => setItemFilter('offered')}
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${
+                    itemFilter === 'offered'
+                      ? 'bg-white text-amber-700 shadow-xs ring-1 ring-amber-500/20'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  Offered ({offeredItems.length})
+                </button>
+                <button
+                  type="button"
+                  id="profile-filter-traded"
+                  onClick={() => setItemFilter('traded')}
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${
+                    itemFilter === 'traded'
+                      ? 'bg-white text-ink shadow-xs ring-1 ring-line/50'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-slate-400" />
+                  Traded ({tradedItems.length})
+                </button>
               </div>
-              {isMine && tradedItems.length > 0 && (
-                <p className="mt-4 text-center text-xs text-muted">
-                  Showing {availableItems.length} available &amp; {tradedItems.length} completed trade{tradedItems.length !== 1 ? 's' : ''}.
-                </p>
-              )}
-            </div>
-          )
+            )}
+
+            {currentItems.length === 0 ? (
+              <EmptyState
+                icon={PackageSearch}
+                title={
+                  itemFilter === 'listed'
+                    ? 'No listed items available'
+                    : itemFilter === 'offered'
+                    ? 'No items currently offered or in trade'
+                    : itemFilter === 'traded'
+                    ? 'No completed trades yet'
+                    : isMine
+                    ? "You haven't listed anything yet"
+                    : 'No available items'
+                }
+                text={
+                  itemFilter === 'listed'
+                    ? 'All your items have either been offered or completed in swaps.'
+                    : itemFilter === 'offered'
+                    ? 'Items you make offers on or agree to swap with others will appear here.'
+                    : itemFilter === 'traded'
+                    ? 'Completed swaps will be archived here once both traders confirm.'
+                    : isMine
+                    ? 'List something you would like to swap with the community.'
+                    : `@${profile.username} has no items available right now.`
+                }
+                action={
+                  isMine && itemFilter === 'listed' ? (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => navigate('/new')}
+                    >
+                      <Plus size={16} /> List an item
+                    </button>
+                  ) : isMine && itemFilter === 'offered' ? (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => navigate('/explore')}
+                    >
+                      Explore items to swap
+                    </button>
+                  ) : isMine && itemFilter === 'all' ? (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => navigate('/new')}
+                    >
+                      <Plus size={16} /> List an item
+                    </button>
+                  ) : null
+                }
+              />
+            ) : (
+              <div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+                  {currentItems.map((item, i) => {
+                    const isOffered = offeredItems.some((o) => o.id === item.id) && item.status !== 'traded';
+                    const decorated = isOffered
+                      ? { ...item, status: inTradeIds.has(item.id) ? 'in_trade' : 'pending' }
+                      : item;
+                    return <ItemCard key={item.id} item={decorated} showStatus={isMine} index={i} />;
+                  })}
+                </div>
+                {isMine && (
+                  <p className="mt-4 text-center text-xs text-muted">
+                    {itemFilter === 'all'
+                      ? `Showing all ${items.length} items (${availableItems.length} listed, ${offeredItems.length} offered, ${tradedItems.length} traded).`
+                      : itemFilter === 'listed'
+                      ? `Showing ${availableItems.length} listed item${availableItems.length !== 1 ? 's' : ''} available to swap.`
+                      : itemFilter === 'offered'
+                      ? `Showing ${offeredItems.length} item${offeredItems.length !== 1 ? 's' : ''} currently in trade or pending offer.`
+                      : `Showing ${tradedItems.length} completed traded item${tradedItems.length !== 1 ? 's' : ''}.`}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         ) : activeTab === 'reviews' ? (
           reviews.length === 0 ? (
             <EmptyState
