@@ -218,3 +218,83 @@ export async function getUnreadTradeCount(userId) {
   }
 }
 
+/**
+ * Fetch recent notifications from public.notifications table
+ */
+export async function fetchNotifications(userId, limit = 40) {
+  if (!userId || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn('Could not fetch notifications:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch total unread notifications count
+ */
+export async function fetchUnreadNotificationsCount(userId) {
+  if (!userId || !supabase) return 0;
+  try {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+
+    if (error) return 0;
+    return count || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Mark a single notification as read
+ */
+export async function markNotificationAsRead(notificationId) {
+  if (!notificationId || !supabase) return;
+  try {
+    await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId);
+    window.dispatchEvent(new CustomEvent('switchr:unread-change'));
+  } catch (err) {
+    console.debug('Failed to mark notification read:', err);
+  }
+}
+
+/**
+ * Mark all notifications as read for current user
+ */
+export async function markAllNotificationsAsRead(userId) {
+  if (!userId || !supabase) return;
+  try {
+    const { error } = await supabase.rpc('mark_all_notifications_read');
+    if (error) {
+      // Fallback
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', userId)
+        .eq('read', false);
+    }
+    window.dispatchEvent(new CustomEvent('switchr:unread-change'));
+  } catch (err) {
+    console.debug('Failed to mark all notifications read:', err);
+  }
+}
+
+

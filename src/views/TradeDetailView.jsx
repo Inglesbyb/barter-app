@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRightLeft, Bell, Check, CheckCircle2, Clock, Image as ImageIcon, Lock, PartyPopper, Send, Sparkles, Volume2, VolumeX, X, XCircle } from 'lucide-react';
+import { ArrowRightLeft, Bell, Check, CheckCircle2, Clock, Image as ImageIcon, Lock, PartyPopper, Send, ShieldCheck, Sparkles, Volume2, VolumeX, X, XCircle } from 'lucide-react';
 import { supabase, unwrap, uploadChatImage, TRADE_SELECT } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import { playMessageSound, showBrowserNotification, markTradeAsRead, getNotificationPermission, requestNotificationPermission, isSoundMuted, toggleSoundMuted } from '../lib/notifications';
@@ -9,6 +9,7 @@ import { Avatar, BackButton, ErrorBox, ItemImage, PageLoader, Spinner, Stars, St
 
 export default function TradeDetailView({ tradeId }) {
   const { session, showToast } = useApp();
+  const [showSafetyTip, setShowSafetyTip] = useState(true);
 
   const { data, loading, error, reload } = useQuery(async () => {
     const [trade, messages, myReview] = await Promise.all([
@@ -326,6 +327,26 @@ function TradeRoom({ initial, reload }) {
               )}
             </div>
           </div>
+
+          {/* Liverpool Swap Meetup Safety Tip */}
+          {showSafetyTip && chatOpen && (
+            <div className="flex items-center justify-between gap-3 border-b border-amber-200/60 bg-amber-50/80 px-4 py-2 text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={16} className="shrink-0 text-amber-600" />
+                <span>
+                  <strong>Safe Swap Tip:</strong> Meet in a busy public place (e.g. Liverpool ONE, Baltic Triangle, or coffee shop) & inspect items before confirming.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSafetyTip(false)}
+                className="rounded-lg p-0.5 text-amber-700/70 hover:bg-amber-100 hover:text-amber-950 transition"
+                aria-label="Dismiss tip"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
 
           <div className="flex-1 space-y-2 overflow-y-auto bg-canvas/60 px-4 py-4">
             {messages.length === 0 && (

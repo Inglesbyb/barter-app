@@ -187,6 +187,48 @@ export default function App() {
           }
         },
       )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${myId}` },
+        async ({ new: n }) => {
+          if (!n) return;
+
+          // Play appropriate chime
+          if (['offer_accepted', 'trade_completed', 'review'].includes(n.type)) {
+            playTradeAlertSound();
+          } else {
+            playMessageSound();
+          }
+
+          // Trigger floating in-app banner
+          const notifId = crypto.randomUUID();
+          setIncomingNotifs((prev) => [
+            {
+              id: notifId,
+              title: n.title,
+              content: n.content,
+              link: n.link,
+            },
+            ...prev.slice(0, 2),
+          ]);
+
+          setTimeout(() => {
+            setIncomingNotifs((prev) => prev.filter((item) => item.id !== notifId));
+          }, 6500);
+
+          // Trigger Desktop Push Notification
+          showBrowserNotification(
+            `SwitchR: ${n.title}`,
+            n.content || 'Tap to view details',
+            () => {
+              if (n.link) navigate(n.link);
+            },
+          );
+
+          // Dispatch event to update navbar bell counter
+          window.dispatchEvent(new CustomEvent('switchr:unread-change'));
+        },
+      )
       .subscribe();
 
     return () => {

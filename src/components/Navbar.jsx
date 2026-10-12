@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Compass, Flame, ArrowRightLeft, Plus, User } from 'lucide-react';
+import { Compass, Flame, ArrowRightLeft, Plus, User, Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { navigate, useApp } from '../lib/core';
-import { getUnreadTradeCount, subscribeToUnreadChanges } from '../lib/notifications';
+import { 
+  getUnreadTradeCount, 
+  subscribeToUnreadChanges,
+  fetchNotifications,
+  fetchUnreadNotificationsCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead
+} from '../lib/notifications';
+import NotificationCenterModal from './NotificationCenterModal';
 import { Avatar } from './ui';
 import { Logo } from '../views/AuthView';
 
@@ -11,6 +19,9 @@ export default function Navbar({ currentPath }) {
   const userId = session?.user?.id;
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
 
   // Live count of pending offers waiting for the current user and unread messages
   useEffect(() => {
@@ -30,8 +41,16 @@ export default function Navbar({ currentPath }) {
       setUnreadMsgCount(count);
     };
 
+    const loadNotifs = async () => {
+      const list = await fetchNotifications(userId);
+      const count = await fetchUnreadNotificationsCount(userId);
+      setNotifications(list);
+      setUnreadNotifCount(count);
+    };
+
     fetchPending();
     fetchUnreadMessages();
+    loadNotifs();
 
     // Listen for new trades targeting current user
     const channel = supabase
@@ -42,6 +61,7 @@ export default function Navbar({ currentPath }) {
         () => {
           fetchPending();
           fetchUnreadMessages();
+          loadNotifs();
         },
       )
       .on(
@@ -51,11 +71,19 @@ export default function Navbar({ currentPath }) {
           fetchUnreadMessages();
         },
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        () => {
+          loadNotifs();
+        },
+      )
       .subscribe();
 
     // Also listen to internal read/unread state changes
     const unsubUnread = subscribeToUnreadChanges(() => {
       fetchUnreadMessages();
+      loadNotifs();
     });
 
     return () => {
@@ -65,6 +93,23 @@ export default function Navbar({ currentPath }) {
   }, [userId]);
 
   const totalBadge = pendingCount + unreadMsgCount;
+
+  const handleMarkAllRead = async () => {
+    if (!userId) return;
+    await markAllNotificationsAsRead(userId);
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadNotifCount(0);
+  };
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif.read) {
+      await markNotificationAsRead(notif.id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n)),
+      );
+      setUnreadNotifCount((c) => Math.max(0, c - 1));
+    }
+  };
 
   const navItems = [
     { label: 'Browse', path: '/', icon: Compass, id: 'nav-browse' },
@@ -98,72 +143,103 @@ export default function Navbar({ currentPath }) {
             <Logo />
           </button>
 
-          <nav className="hidden items-center gap-2 sm:flex">
-            <button
-              type="button"
-              id="nav-desktop-browse"
-              onClick={() => navigate('/')}
-              className={`btn-ghost rounded-xl px-3.5 py-2 text-sm font-semibold ${
-                isCurrent('/') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
-              }`}
-            >
-              <Compass size={17} /> Browse
-            </button>
+          {/* Right Controls: Desktop Nav + Mobile Notification Bell */}
+          <div className="flex items-center gap-2">
+            <nav className="hidden items-center gap-2 sm:flex">
+              <button
+                type="button"
+                id="nav-desktop-browse"
+                onClick={() => navigate('/')}
+                className={`btn-ghost rounded-xl px-3.5 py-2 text-sm font-semibold ${
+                  isCurrent('/') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
+                }`}
+              >
+                <Compass size={17} /> Browse
+              </button>
 
-            <button
-              type="button"
-              id="nav-desktop-explore"
-              onClick={() => navigate('/explore')}
-              className={`btn-ghost rounded-xl px-3.5 py-2 text-sm font-semibold ${
-                isCurrent('/explore') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
-              }`}
-            >
-              <Flame size={17} className={isCurrent('/explore') ? 'text-coral fill-coral' : 'text-coral'} /> Explore
-            </button>
+              <button
+                type="button"
+                id="nav-desktop-explore"
+                onClick={() => navigate('/explore')}
+                className={`btn-ghost rounded-xl px-3.5 py-2 text-sm font-semibold ${
+                  isCurrent('/explore') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
+                }`}
+              >
+                <Flame size={17} className={isCurrent('/explore') ? 'text-coral fill-coral' : 'text-coral'} /> Explore
+              </button>
 
+              <button
+                type="button"
+                id="nav-desktop-trades"
+                onClick={() => navigate('/trades')}
+                className={`btn-ghost relative rounded-xl px-3.5 py-2 text-sm font-semibold ${
+                  isCurrent('/trades') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
+                }`}
+              >
+                <ArrowRightLeft size={17} /> Trades
+                {totalBadge > 0 && (
+                  <span
+                    className={`flex h-5 min-w-5 items-center justify-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white shadow-sm ${
+                      unreadMsgCount > 0 ? 'animate-pulse' : ''
+                    }`}
+                    title={`${pendingCount} pending offers, ${unreadMsgCount} unread messages`}
+                  >
+                    {totalBadge}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                id="nav-desktop-list"
+                onClick={() => navigate('/new')}
+                className="btn-primary ml-1 rounded-xl px-4 py-2 text-sm"
+              >
+                <Plus size={16} strokeWidth={2.5} /> List item
+              </button>
+            </nav>
+
+            {/* Notification Bell (Both Desktop & Mobile) */}
             <button
               type="button"
-              id="nav-desktop-trades"
-              onClick={() => navigate('/trades')}
-              className={`btn-ghost relative rounded-xl px-3.5 py-2 text-sm font-semibold ${
-                isCurrent('/trades') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
-              }`}
+              id="nav-notifications-btn"
+              onClick={() => setNotifModalOpen(true)}
+              className="btn-ghost relative rounded-xl p-2 text-ink-soft transition hover:bg-canvas hover:text-ink"
+              title="Notifications"
+              aria-label="View notifications"
             >
-              <ArrowRightLeft size={17} /> Trades
-              {totalBadge > 0 && (
-                <span
-                  className={`flex h-5 min-w-5 items-center justify-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white shadow-sm ${
-                    unreadMsgCount > 0 ? 'animate-pulse' : ''
-                  }`}
-                  title={`${pendingCount} pending offers, ${unreadMsgCount} unread messages`}
-                >
-                  {totalBadge}
+              <Bell size={19} />
+              {unreadNotifCount > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-coral px-1 text-[10px] font-bold text-white shadow-xs animate-pulse">
+                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
                 </span>
               )}
             </button>
 
-            <button
-              type="button"
-              id="nav-desktop-list"
-              onClick={() => navigate('/new')}
-              className="btn-primary ml-2 rounded-xl px-4 py-2 text-sm"
-            >
-              <Plus size={16} strokeWidth={2.5} /> List item
-            </button>
-
+            {/* Profile Avatar (Desktop) */}
             <button
               type="button"
               id="nav-desktop-profile"
               onClick={() => navigate('/me')}
-              className={`btn-ghost ml-1 flex items-center gap-2 rounded-xl p-1.5 transition ${
+              className={`btn-ghost hidden sm:flex items-center gap-2 rounded-xl p-1.5 transition ${
                 isCurrent('/me') ? 'bg-brand-soft ring-2 ring-brand/30' : ''
               }`}
             >
               <Avatar name={profile?.username || session?.user?.email || 'me'} size={32} />
             </button>
-          </nav>
+          </div>
         </div>
       </header>
+
+      {/* Notification Center Popover */}
+      <NotificationCenterModal
+        isOpen={notifModalOpen}
+        onClose={() => setNotifModalOpen(false)}
+        notifications={notifications}
+        unreadCount={unreadNotifCount}
+        onMarkAllRead={handleMarkAllRead}
+        onNotificationClick={handleNotificationClick}
+      />
 
       {/* Mobile Bottom Navigation Bar */}
       <nav aria-label="Mobile Navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 pb-safe backdrop-blur-md sm:hidden">
