@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Compass, Flame, ArrowRightLeft, Plus, User, Bell, ShieldAlert } from 'lucide-react';
+import { Compass, Flame, ArrowRightLeft, Plus, User, Bell, ShieldAlert, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { navigate, useApp } from '../lib/core';
 import { 
@@ -15,7 +15,7 @@ import { Avatar } from './ui';
 import { Logo } from '../views/AuthView';
 
 export default function Navbar({ currentPath }) {
-  const { session, profile, adminMode, toggleAdminMode } = useApp();
+  const { session, profile, adminMode, toggleAdminMode, showToast } = useApp();
   const userId = session?.user?.id;
   const isFounderAdmin = Boolean(profile?.is_admin);
   const [pendingCount, setPendingCount] = useState(0);
@@ -268,9 +268,30 @@ export default function Navbar({ currentPath }) {
               className={`btn-ghost hidden sm:flex items-center gap-2 rounded-xl p-1.5 transition ${
                 isCurrent('/me') ? 'bg-brand-soft ring-2 ring-brand/30' : ''
               }`}
+              title="View your profile"
             >
               <Avatar name={profile?.username || session?.user?.email || 'me'} size={32} />
             </button>
+
+            {/* Quick Sign Out (Desktop) */}
+            {session && (
+              <button
+                type="button"
+                id="nav-desktop-signout"
+                onClick={async () => {
+                  try {
+                    localStorage.removeItem('switchr_admin_mode');
+                  } catch {}
+                  await supabase.auth.signOut().catch(() => {});
+                  showToast('Signed out successfully.', 'info');
+                  navigate('/');
+                }}
+                className="btn-ghost hidden sm:flex items-center p-2 text-muted hover:text-bad rounded-xl transition"
+                title="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
+            )}
           </div>
         </div>
       </header>

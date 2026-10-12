@@ -20,6 +20,7 @@ export default function ProfileView({ userId }) {
   const [editOpen, setEditOpen] = useState(false);
   const [savedItems, setSavedItems] = useState([]);
   const [tradeTargetItem, setTradeTargetItem] = useState(null);
+  const [signOutBusy, setSignOutBusy] = useState(false);
 
   const { data, loading, error, reload } = useQuery(async () => {
     const fetchSaved = async () => {
@@ -121,8 +122,27 @@ export default function ProfileView({ userId }) {
   };
 
   const handleSignOut = async () => {
-    if (!window.confirm('Are you sure you want to sign out?')) return;
-    await supabase.auth.signOut();
+    if (signOutBusy) return;
+    setSignOutBusy(true);
+    try {
+      try {
+        localStorage.removeItem('switchr_admin_mode');
+      } catch {}
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      showToast('Signed out successfully.', 'info');
+      navigate('/');
+    } catch (err) {
+      console.warn('Sign out encountered error, forcing local session clear:', err);
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {}
+      showToast('Signed out.', 'info');
+      window.location.hash = '#/';
+      window.location.reload();
+    } finally {
+      setSignOutBusy(false);
+    }
   };
 
   return (
@@ -166,10 +186,16 @@ export default function ProfileView({ userId }) {
                 type="button"
                 id="profile-signout-btn"
                 onClick={handleSignOut}
-                className="btn-ghost p-2 text-bad hover:bg-bad-soft"
-                title="Sign out"
+                disabled={signOutBusy}
+                className="btn-ghost flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-xs sm:text-sm font-semibold text-bad hover:bg-bad-soft hover:border-bad/30 transition active:scale-95 cursor-pointer"
+                title="Sign out of your account"
               >
-                <LogOut size={18} />
+                {signOutBusy ? (
+                  <Spinner className="h-4 w-4 text-bad" />
+                ) : (
+                  <LogOut size={16} />
+                )}
+                <span>Sign out</span>
               </button>
             </div>
           )}
