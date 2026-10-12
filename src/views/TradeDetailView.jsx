@@ -8,8 +8,7 @@ import ReviewModal from '../components/ReviewModal';
 import { Avatar, BackButton, ErrorBox, ItemImage, PageLoader, Spinner, Stars, StatusBadge } from '../components/ui';
 
 export default function TradeDetailView({ tradeId }) {
-  const { session, showToast } = useApp();
-  const [showSafetyTip, setShowSafetyTip] = useState(true);
+  const { session } = useApp();
 
   const { data, loading, error, reload } = useQuery(async () => {
     const [trade, messages, myReview] = await Promise.all([
@@ -58,6 +57,7 @@ function TradeRoom({ initial, reload }) {
 
   const [muted, setMuted] = useState(isSoundMuted());
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
+  const [showSafetyTip, setShowSafetyTip] = useState(true);
 
   // Live updates: new messages + trade status changes.
   useEffect(() => {
