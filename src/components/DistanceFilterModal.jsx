@@ -92,8 +92,22 @@ export default function DistanceFilterModal({
   const milesDisplay = radius != null ? Math.round(radius * 0.621371) : null;
 
   return (
-    <Modal open={open} onClose={onClose} title="Location & Radius">
-      <div className="space-y-4 max-h-[82vh] overflow-y-auto pr-1">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Location & Radius"
+      footer={
+        <button
+          type="button"
+          id="distance-modal-apply"
+          onClick={onClose}
+          className="btn-primary w-full py-3 text-xs font-semibold shadow-lift"
+        >
+          <Check size={16} /> Apply distance filter ({radius != null ? `${radius} km of ${currentLocationName}` : 'All UK'})
+        </button>
+      }
+    >
+      <div className="space-y-4">
         
         {/* 1. Location Input & GPS Trigger */}
         <div>
@@ -311,16 +325,6 @@ export default function DistanceFilterModal({
             </div>
           </div>
         )}
-
-        {/* 5. Apply Button */}
-        <button
-          type="button"
-          id="distance-modal-apply"
-          onClick={onClose}
-          className="btn-primary w-full py-3 text-xs font-semibold shadow-lift"
-        >
-          <Check size={16} /> Apply distance filter ({radius != null ? `${radius} km of ${currentLocationName}` : 'All UK'})
-        </button>
       </div>
     </Modal>
   );
