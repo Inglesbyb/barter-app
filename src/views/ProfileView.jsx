@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation } from 'lucide-react';
+import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft } from 'lucide-react';
 import { supabase, unwrap, getProfileStats } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import { getCurrentPosition, POPULAR_LOCATIONS } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
 import Modal from '../components/Modal';
-import { Avatar, BackButton, EmptyState, ErrorBox, PageLoader, Spinner, Stars } from '../components/ui';
+import TradeOfferModal from '../components/TradeOfferModal';
+import { Avatar, BackButton, EmptyState, ErrorBox, ItemImage, PageLoader, Spinner, Stars } from '../components/ui';
 
 export default function ProfileView({ userId }) {
   const { session, showToast, setProfile } = useApp();
@@ -14,11 +15,38 @@ export default function ProfileView({ userId }) {
   const targetId = userId || currentUserId;
   const isMine = targetId === currentUserId;
 
-  const [activeTab, setActiveTab] = useState('items'); // 'items' | 'reviews'
+  const [activeTab, setActiveTab] = useState('items'); // 'items' | 'reviews' | 'shortlist'
   const [editOpen, setEditOpen] = useState(false);
+  const [savedItems, setSavedItems] = useState([]);
+  const [tradeTargetItem, setTradeTargetItem] = useState(null);
 
   const { data, loading, error, reload } = useQuery(async () => {
-    const [profile, stats, items, reviews] = await Promise.all([
+    const fetchSaved = async () => {
+      if (!isMine) return [];
+      try {
+        const { data: swipeRows } = await supabase
+          .from('swipes')
+          .select('item_id')
+          .eq('user_id', targetId)
+          .eq('action', 'save');
+        const savedIds = new Set((swipeRows || []).map((r) => r.item_id));
+        try {
+          const local = JSON.parse(localStorage.getItem(`switchr_swipes_${targetId}`) || '{}');
+          (local.saved || []).forEach((id) => savedIds.add(id));
+        } catch {}
+
+        if (savedIds.size > 0) {
+          const { data: itms } = await supabase
+            .from('items')
+            .select('*, owner:profiles(id, username, location_name)')
+            .in('id', Array.from(savedIds));
+          return itms || [];
+        }
+      } catch {}
+      return [];
+    };
+
+    const [profile, stats, items, reviews, savedList] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', targetId).maybeSingle().then(unwrap),
       getProfileStats(targetId),
       supabase
@@ -33,10 +61,12 @@ export default function ProfileView({ userId }) {
         .eq('ratee_id', targetId)
         .order('created_at', { ascending: false })
         .then(unwrap),
+      fetchSaved(),
     ]);
 
     if (!profile) throw new Error('Profile not found.');
-    return { profile, stats, items, reviews };
+    setSavedItems(savedList || []);
+    return { profile, stats, items, reviews, savedList: savedList || [] };
   }, [targetId]);
 
   if (loading) return <PageLoader />;
@@ -46,6 +76,20 @@ export default function ProfileView({ userId }) {
   const availableItems = items.filter((i) => i.status === 'available');
   const tradedItems = items.filter((i) => i.status === 'traded');
   const displayItems = isMine ? items : availableItems;
+
+  const handleRemoveSaved = async (item) => {
+    try {
+      await supabase.from('swipes').delete().eq('item_id', item.id);
+    } catch {}
+    try {
+      const key = `switchr_swipes_${targetId}`;
+      const cur = JSON.parse(localStorage.getItem(key) || '{}');
+      cur.saved = (cur.saved || []).filter((id) => id !== item.id);
+      localStorage.setItem(key, JSON.stringify(cur));
+    } catch {}
+    setSavedItems((prev) => prev.filter((i) => i.id !== item.id));
+    showToast(`Removed "${item.title}" from shortlist`, 'info');
+  };
 
   const handleSignOut = async () => {
     if (!window.confirm('Are you sure you want to sign out?')) return;
@@ -156,6 +200,20 @@ export default function ProfileView({ userId }) {
         >
           <Star size={17} /> Reviews ({reviews.length})
         </button>
+        {isMine && (
+          <button
+            type="button"
+            id="profile-tab-shortlist"
+            onClick={() => setActiveTab('shortlist')}
+            className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition ${
+              activeTab === 'shortlist'
+                ? 'border-brand text-brand'
+                : 'border-transparent text-muted hover:text-ink'
+            }`}
+          >
+            <Bookmark size={17} /> Shortlist ({savedItems.length})
+          </button>
+        )}
       </div>
 
       {/* Tab Contents */}
@@ -196,47 +254,129 @@ export default function ProfileView({ userId }) {
               )}
             </div>
           )
-        ) : reviews.length === 0 ? (
-          <EmptyState
-            icon={Star}
-            title="No reviews yet"
-            text={
-              isMine
-                ? 'Complete swaps to get reviews and build trust.'
-                : `@${profile.username} hasn't received any reviews yet.`
-            }
-          />
+        ) : activeTab === 'reviews' ? (
+          reviews.length === 0 ? (
+            <EmptyState
+              icon={Star}
+              title="No reviews yet"
+              text={
+                isMine
+                  ? 'Complete swaps to get reviews and build trust.'
+                  : `@${profile.username} hasn't received any reviews yet.`
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {reviews.map((rev) => (
+                <motion.div
+                  key={rev.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="card p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/profile/${rev.rater.id}`)}
+                      className="flex items-center gap-2 text-left hover:text-brand"
+                    >
+                      <Avatar name={rev.rater.username} size={30} />
+                      <span className="text-sm font-semibold">@{rev.rater.username}</span>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Stars value={rev.score} size={15} />
+                      <span className="text-xs text-muted">{timeAgo(rev.created_at)}</span>
+                    </div>
+                  </div>
+                  {rev.comment && (
+                    <p className="mt-2.5 text-sm text-ink-soft">{rev.comment}</p>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )
         ) : (
-          <div className="space-y-3">
-            {reviews.map((rev) => (
-              <motion.div
-                key={rev.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="card p-4"
-              >
-                <div className="flex items-center justify-between">
+          /* Shortlist Tab */
+          savedItems.length === 0 ? (
+            <EmptyState
+              icon={Bookmark}
+              title="Your shortlist is empty"
+              text="Swipe right on items in Explore to save them to your shortlist."
+              action={
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => navigate('/explore')}
+                >
+                  Explore nearby items
+                </button>
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {savedItems.map((it) => (
+                <div
+                  key={it.id}
+                  className="card flex items-center justify-between gap-3 p-3 transition hover:shadow-lift"
+                >
                   <button
                     type="button"
-                    onClick={() => navigate(`/profile/${rev.rater.id}`)}
-                    className="flex items-center gap-2 text-left hover:text-brand"
+                    onClick={() => navigate(`/item/${it.id}`)}
+                    className="flex flex-1 items-center gap-3 text-left min-w-0"
                   >
-                    <Avatar name={rev.rater.username} size={30} />
-                    <span className="text-sm font-semibold">@{rev.rater.username}</span>
+                    <ItemImage
+                      src={it.image_url}
+                      alt={it.title}
+                      className="h-16 w-16 shrink-0 rounded-xl object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">{it.title}</p>
+                      <p className="text-xs text-ink-soft">
+                        {it.condition} · @{it.owner?.username || 'trader'}
+                      </p>
+                      {it.owner?.location_name && (
+                        <p className="flex items-center gap-1 text-[11px] text-muted">
+                          <MapPin size={10} />
+                          <span className="truncate">{it.owner.location_name}</span>
+                        </p>
+                      )}
+                    </div>
                   </button>
-                  <div className="flex items-center gap-2">
-                    <Stars value={rev.score} size={15} />
-                    <span className="text-xs text-muted">{timeAgo(rev.created_at)}</span>
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setTradeTargetItem(it)}
+                      className="btn-primary rounded-xl px-3 py-1.5 text-xs"
+                    >
+                      Offer swap
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSaved(it)}
+                      title="Remove from shortlist"
+                      className="flex h-6 w-6 items-center justify-center self-end rounded-lg text-muted hover:bg-bad/10 hover:text-bad"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
-                {rev.comment && (
-                  <p className="mt-2.5 text-sm text-ink-soft">{rev.comment}</p>
-                )}
-              </motion.div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )
         )}
       </div>
+
+      {tradeTargetItem && (
+        <TradeOfferModal
+          open={Boolean(tradeTargetItem)}
+          onClose={() => setTradeTargetItem(null)}
+          wantedItem={tradeTargetItem}
+          onSent={() => {
+            showToast(`Offer sent for ${tradeTargetItem.title}!`);
+            setTradeTargetItem(null);
+          }}
+        />
+      )}
 
       {isMine && (
         <EditProfileModal

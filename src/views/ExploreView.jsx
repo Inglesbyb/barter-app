@@ -431,7 +431,7 @@ export default function ExploreView() {
             className="btn-secondary relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold shadow-card transition hover:border-brand/40"
           >
             <Bookmark size={15} className="text-coral" />
-            <span>Saved</span>
+            <span>Shortlist</span>
             {savedItems.length > 0 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-coral px-1 text-[11px] font-bold text-white shadow-xs">
                 {savedItems.length}
