@@ -269,7 +269,7 @@ export default function App() {
       return <ExploreView />;
     }
     if (root === 'new') {
-      return <ListItemView />;
+      return <ListItemView key={path} />;
     }
     if (root === 'trades') {
       const searchParams = new URLSearchParams(window.location.hash.split('?')[1] || '');

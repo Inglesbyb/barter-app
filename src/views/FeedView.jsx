@@ -207,6 +207,7 @@ export default function FeedView() {
           <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
           <input
             id="feed-search"
+            name="feed_search_query"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -218,6 +219,14 @@ export default function FeedView() {
             }}
             placeholder="Search items, or type a UK postcode (e.g. M1, SW1A, BS1)…"
             className="field rounded-2xl py-3.5 pl-11 pr-10 text-base shadow-card"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
+            aria-autocomplete="none"
           />
           {search && (
             <button

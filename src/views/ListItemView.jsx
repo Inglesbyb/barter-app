@@ -22,6 +22,8 @@ export default function ListItemView() {
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Unique random field key per mount to guarantee browsers do not match old autocomplete/saved info history
+  const [fieldKey] = useState(() => Math.random().toString(36).slice(2, 8));
 
   // Release the preview object URL when it changes or on unmount.
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
@@ -98,7 +100,7 @@ export default function ListItemView() {
       <BackButton />
       <PageTitle title="List an item" subtitle="Add something you'd like to swap." />
 
-      <form onSubmit={submit} className="card space-y-6 p-5 sm:p-7">
+      <form onSubmit={submit} className="card space-y-6 p-5 sm:p-7" autoComplete="off" noValidate={false}>
         {/* Photo */}
         <div>
           <span className="label">Photo</span>
@@ -144,6 +146,7 @@ export default function ListItemView() {
           </label>
           <input
             id="list-title"
+            name={`item_title_${fieldKey}`}
             className="field"
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
@@ -151,6 +154,14 @@ export default function ListItemView() {
             minLength={2}
             maxLength={80}
             required
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
+            aria-autocomplete="none"
           />
         </div>
 
@@ -170,10 +181,19 @@ export default function ListItemView() {
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
             <input
               type="search"
+              name={`cat_filter_${fieldKey}`}
               value={catSearch}
               onChange={(e) => setCatSearch(e.target.value)}
               placeholder="Filter categories (e.g. pokemon, collectibles, tools, gaming)..."
               className="w-full rounded-xl border border-line bg-canvas py-2 pl-8 pr-8 text-xs text-ink placeholder:text-muted focus:border-brand focus:bg-white focus:outline-none"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-form-type="other"
+              aria-autocomplete="none"
             />
             {catSearch && (
               <button
@@ -258,11 +278,20 @@ export default function ListItemView() {
           </label>
           <textarea
             id="list-description"
+            name={`item_desc_${fieldKey}`}
             className="field min-h-28 resize-y"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Size, age, any wear, and what kind of things you'd swap it for…"
             maxLength={1000}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
+            aria-autocomplete="none"
           />
         </div>
 
