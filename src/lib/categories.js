@@ -9,6 +9,7 @@ import {
   BookOpen,
   Wrench,
   Palette,
+  Sparkles,
   Puzzle,
   Package,
 } from 'lucide-react';
@@ -129,16 +130,32 @@ export const CATEGORY_DEFINITIONS = [
     ],
   },
   {
-    id: 'Hobbies & Collectibles',
-    label: 'Hobbies & Collectibles',
+    id: 'Hobbies & Crafts',
+    label: 'Hobbies & Crafts',
     shortLabel: 'Hobbies',
     icon: Palette,
-    description: 'Instruments, art, craft supplies & collectibles',
+    description: 'Instruments, guitars, art & craft supplies',
     keywords: [
       'guitar', 'fender', 'gibson', 'taylor', 'squier', 'ukulele', 'piano',
       'keyboard', 'synth', 'synthesizer', 'korg', 'roland', 'arturia', 'akai',
       'pedal', 'amp', 'amplifier', 'drum', 'craft', 'art', 'paint', 'easel',
-      'pottery', 'collectibles', 'music', 'sewing', 'knitting',
+      'pottery', 'music', 'sewing', 'knitting', 'canvas', 'sketchbook',
+    ],
+  },
+  {
+    id: 'Collectibles',
+    label: 'Collectibles',
+    shortLabel: 'Collectibles',
+    icon: Sparkles,
+    description: 'Pokémon cards, rare coins, retro memorabilia & mad treasures',
+    keywords: [
+      'pokemon', 'pokemon card', 'pokemon cards', 'charizard', 'pikachu', 'tcg',
+      'trading card', 'trading cards', 'magic the gathering', 'mtg', 'yugioh', 'yu-gi-oh',
+      'sports card', 'sports cards', 'panini', 'topps', 'match attax', 'collectible',
+      'collectibles', 'vintage', 'memorabilia', 'signed', 'autograph', 'coin', 'coins',
+      'banknote', 'stamp', 'stamps', 'rare', 'limited edition', 'graded', 'psa',
+      'bgs', 'cgc', 'retro', 'antique', 'antiques', 'first edition', 'booster',
+      'binder', 'slab', 'mad stuff', 'treasure', 'medal',
     ],
   },
   {
@@ -152,7 +169,7 @@ export const CATEGORY_DEFINITIONS = [
       'doll', 'dolls', 'funko', 'pop', 'teddies', 'teddy', 'plush', 'barbie',
       'nerf', 'playmobil', 'hot wheels', 'board game', 'catan', 'monopoly',
       'wingspan', 'gloomhaven', 'pandemic', 'everdell', 'warhammer', 'miniatures',
-      'ticket to ride', 'terraforming mars', 'card game', 'boardgame',
+      'ticket to ride', 'terraforming mars', 'boardgame',
     ],
   },
   {
@@ -212,7 +229,11 @@ export function normalizeCategory(name) {
     Tools: 'Tools & DIY',
     'Toys & Games': 'Toys & Games',
     Toys: 'Toys & Games',
-    Music: 'Hobbies & Collectibles',
+    Music: 'Hobbies & Crafts',
+    'Hobbies & Crafts': 'Hobbies & Crafts',
+    'Hobbies & Collectibles': 'Collectibles',
+    Hobbies: 'Hobbies & Crafts',
+    Collectibles: 'Collectibles',
     Other: 'Other',
   };
   return map[name] || name;

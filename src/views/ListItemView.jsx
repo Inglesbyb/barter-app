@@ -172,7 +172,7 @@ export default function ListItemView() {
               type="search"
               value={catSearch}
               onChange={(e) => setCatSearch(e.target.value)}
-              placeholder="Filter categories (e.g. gaming, tools, audio, bikes)..."
+              placeholder="Filter categories (e.g. pokemon, collectibles, tools, gaming)..."
               className="w-full rounded-xl border border-line bg-canvas py-2 pl-8 pr-8 text-xs text-ink placeholder:text-muted focus:border-brand focus:bg-white focus:outline-none"
             />
             {catSearch && (
