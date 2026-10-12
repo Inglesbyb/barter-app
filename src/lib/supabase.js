@@ -14,13 +14,12 @@ export function unwrap({ data, error }) {
   return data;
 }
 
-/** Shared embed strings for queries. */
 export const TRADE_SELECT = `
   *,
   offered:items!trades_offered_item_id_fkey(*),
   requested:items!trades_requested_item_id_fkey(*),
-  initiator:profiles!trades_initiator_id_fkey(id, username),
-  receiver:profiles!trades_receiver_id_fkey(id, username)
+  initiator:profiles!trades_initiator_id_fkey(id, username, location_name, lat, lng),
+  receiver:profiles!trades_receiver_id_fkey(id, username, location_name, lat, lng)
 `;
 
 export const ITEM_SELECT = '*, owner:profiles(id, username, location_name, lat, lng)';

@@ -1,8 +1,9 @@
-import { useImperativeHandle, useState } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'framer-motion';
-import { Check, X, Inbox, ArrowRightLeft, Hand, Star } from 'lucide-react';
+import { Check, X, Inbox, ArrowRightLeft, Hand, Star, MapPin } from 'lucide-react';
 import { supabase, unwrap, TRADE_SELECT, getProfileStats } from '../lib/supabase';
 import { errorMessage, navigate, useApp, useQuery } from '../lib/core';
+import { calculateDistance, formatDistance } from '../lib/geo';
 import { Avatar, BackButton, EmptyState, ErrorBox, ItemImage, PageLoader } from '../components/ui';
 
 const SWIPE_THRESHOLD = 120;
@@ -12,29 +13,37 @@ const SWIPE_THRESHOLD = 120;
  * Right = accept (opens the trade chat, auto-declines the rest). Left = decline.
  */
 export default function OfferSwipeView({ itemId }) {
-  const { session, showToast } = useApp();
+  const { session, profile, showToast } = useApp();
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [cardRef, setCardRef] = useState(null);
+  const cardRef = useRef(null);
 
   const { data, loading, error, reload } = useQuery(async () => {
-    const [item, offers] = await Promise.all([
-      supabase.from('items').select('*').eq('id', itemId).eq('user_id', session.user.id).maybeSingle().then(unwrap),
+    const [item, rawOffers] = await Promise.all([
+      supabase.from('items').select('*').eq('id', itemId).maybeSingle().then(unwrap),
       supabase
         .from('trades')
         .select(TRADE_SELECT)
         .eq('requested_item_id', itemId)
-        .eq('receiver_id', session.user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
         .then(unwrap),
     ]);
-    if (!item) throw new Error('Item not found.');
+    if (!item) throw new Error('Listing not found.');
+
+    // Only allow owner of the listing to review offers
+    if (session?.user?.id && item.user_id !== session.user.id) {
+      throw new Error('You do not own this listing.');
+    }
+
+    // Filter offers to ensure both offered item and initiator exist
+    const offers = (rawOffers || []).filter((o) => o?.offered && o?.initiator);
+
     const ids = [...new Set(offers.map((o) => o.initiator_id))];
     const statsList = await Promise.all(ids.map(getProfileStats));
     const stats = Object.fromEntries(ids.map((id, i) => [id, statsList[i]]));
     return { item, offers, stats };
-  }, [itemId]);
+  }, [itemId, session?.user?.id]);
 
   if (loading) return <PageLoader />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
@@ -97,15 +106,16 @@ export default function OfferSwipeView({ itemId }) {
           <div className="relative aspect-[3/4] w-full">
             {next && (
               <div className="absolute inset-0 scale-[0.94] translate-y-4 opacity-60">
-                <OfferCardFace trade={next} stats={stats[next.initiator_id]} />
+                <OfferCardFace trade={next} stats={stats[next.initiator_id]} userLocation={profile} />
               </div>
             )}
             <AnimatePresence initial={false}>
               <SwipeCard
                 key={current.id}
-                ref={setCardRef}
+                ref={cardRef}
                 trade={current}
                 stats={stats[current.initiator_id]}
+                userLocation={profile}
                 disabled={busy}
                 onDecide={decide}
               />
@@ -118,7 +128,7 @@ export default function OfferSwipeView({ itemId }) {
               id="swipe-decline"
               aria-label="Decline offer"
               disabled={busy}
-              onClick={() => cardRef?.swipe('left')}
+              onClick={() => cardRef.current?.swipe('left')}
               className="flex h-16 w-16 items-center justify-center rounded-full border border-line bg-white text-bad shadow-card transition hover:scale-105 hover:bg-bad hover:text-white active:scale-95 disabled:opacity-50"
             >
               <X size={28} strokeWidth={2.6} />
@@ -128,7 +138,7 @@ export default function OfferSwipeView({ itemId }) {
               id="swipe-accept"
               aria-label="Accept offer"
               disabled={busy}
-              onClick={() => cardRef?.swipe('right')}
+              onClick={() => cardRef.current?.swipe('right')}
               className="flex h-20 w-20 items-center justify-center rounded-full bg-linear-to-br from-ok to-[#0ca678] text-white shadow-lift transition hover:scale-105 active:scale-95 disabled:opacity-50"
             >
               <Check size={34} strokeWidth={2.8} />
@@ -143,7 +153,10 @@ export default function OfferSwipeView({ itemId }) {
   );
 }
 
-function SwipeCard({ ref, trade, stats, disabled, onDecide }) {
+const SwipeCard = forwardRef(function SwipeCard(
+  { trade, stats, userLocation, disabled, onDecide },
+  ref,
+) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-250, 0, 250], [-14, 0, 14]);
   const acceptOpacity = useTransform(x, [30, SWIPE_THRESHOLD], [0, 1]);
@@ -176,47 +189,71 @@ function SwipeCard({ ref, trade, stats, disabled, onDecide }) {
       exit={{ opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 26 }}
     >
-      <OfferCardFace trade={trade} stats={stats} />
+      <OfferCardFace trade={trade} stats={stats} userLocation={userLocation} />
       <motion.div
         style={{ opacity: acceptOpacity }}
-        className="pointer-events-none absolute left-5 top-6 -rotate-12 rounded-xl border-4 border-ok bg-white/80 px-3 py-1 font-display text-2xl font-extrabold text-ok"
+        className="pointer-events-none absolute left-5 top-6 -rotate-12 rounded-xl border-4 border-ok bg-white/80 px-3 py-1 font-display text-2xl font-extrabold text-ok shadow-sm"
       >
         SWAP
       </motion.div>
       <motion.div
         style={{ opacity: declineOpacity }}
-        className="pointer-events-none absolute right-5 top-6 rotate-12 rounded-xl border-4 border-bad bg-white/80 px-3 py-1 font-display text-2xl font-extrabold text-bad"
+        className="pointer-events-none absolute right-5 top-6 rotate-12 rounded-xl border-4 border-bad bg-white/80 px-3 py-1 font-display text-2xl font-extrabold text-bad shadow-sm"
       >
         PASS
       </motion.div>
     </motion.div>
   );
-}
+});
 
-function OfferCardFace({ trade, stats }) {
-  const offered = trade.offered;
+function OfferCardFace({ trade, stats, userLocation }) {
+  const offered = trade?.offered;
+  if (!offered) return null;
+  const initiator = trade?.initiator || {};
+
+  const dist = calculateDistance(
+    userLocation?.lat,
+    userLocation?.lng,
+    initiator?.lat,
+    initiator?.lng,
+  );
+
   return (
     <div className="relative h-full w-full select-none overflow-hidden rounded-3xl bg-ink shadow-lift">
-      <ItemImage src={offered.image_url} alt={offered.title} className="pointer-events-none h-full w-full" />
+      <ItemImage
+        src={offered.image_url}
+        alt={offered.title}
+        className="pointer-events-none h-full w-full"
+      />
       <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/85 to-transparent p-5 pt-24 text-white">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 items-center">
           <span className="badge bg-white/15 text-white backdrop-blur">{offered.condition}</span>
           <span className="badge bg-white/15 text-white backdrop-blur">{offered.category}</span>
+          {initiator.location_name && (
+            <span className="badge bg-emerald-500/80 text-white backdrop-blur flex items-center gap-1 font-medium">
+              <MapPin size={10} />
+              {dist != null ? `${dist < 1 ? '<1 km' : Math.round(dist) + ' km'}` : ''}{dist != null ? ' · ' : ''}
+              <span className="truncate max-w-[130px]">{initiator.location_name}</span>
+            </span>
+          )}
         </div>
         <h2 className="mt-2 flex items-center gap-2 font-display text-2xl font-bold leading-tight">
           <ArrowRightLeft size={20} className="shrink-0 text-coral" />
           {offered.title}
         </h2>
-        {offered.description && <p className="mt-1.5 line-clamp-2 text-sm text-white/75">{offered.description}</p>}
+        {offered.description && (
+          <p className="mt-1.5 line-clamp-2 text-sm text-white/75">{offered.description}</p>
+        )}
         <div className="mt-4 flex items-center gap-2.5 border-t border-white/15 pt-3">
-          <Avatar name={trade.initiator.username} size={32} />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">@{trade.initiator.username}</p>
+          <Avatar name={initiator.username || 'trader'} size={32} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">@{initiator.username || 'trader'}</p>
             {stats && (
               <p className="flex items-center gap-1 text-xs text-white/70">
                 {stats.reviewCount ? (
                   <>
-                    <Star size={12} className="fill-warn text-warn" /> {stats.avgRating?.toFixed(1)} ({stats.reviewCount}) ·
+                    <Star size={12} className="fill-warn text-warn" /> {stats.avgRating?.toFixed(1)}{' '}
+                    ({stats.reviewCount}) ·
                   </>
                 ) : (
                   'No ratings yet ·'

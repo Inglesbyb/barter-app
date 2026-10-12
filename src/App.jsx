@@ -5,6 +5,7 @@ import { supabase, isSupabaseConfigured, unwrap } from './lib/supabase';
 import { AppContext, useRoute } from './lib/core';
 import Navbar from './components/Navbar';
 import { PageLoader } from './components/ui';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Views
 import AuthView, { ResetPasswordView, Logo } from './views/AuthView';
@@ -140,7 +141,9 @@ export default function App() {
         <Navbar currentPath={path} />
 
         <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 pb-28 sm:pb-14">
-          {renderRoute()}
+          <ErrorBoundary key={path}>
+            {renderRoute()}
+          </ErrorBoundary>
         </main>
 
         {/* Global Toast Container */}
