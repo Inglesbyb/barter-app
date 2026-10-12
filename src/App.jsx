@@ -56,6 +56,23 @@ export default function App() {
     }
   }, []);
 
+  // Check URL hash for Supabase auth errors (e.g. expired reset link)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash.includes('error=')) {
+      const rawHash = window.location.hash.replace(/^#/, '');
+      const params = new URLSearchParams(rawHash);
+      const errCode = params.get('error_code');
+      const errDesc = params.get('error_description') || params.get('error');
+
+      if (errCode === 'otp_expired' || errDesc?.includes('expired')) {
+        showToast('This reset link has expired or has already been used. Please request a fresh one.', 'error');
+      } else if (errDesc) {
+        showToast(decodeURIComponent(errDesc).replace(/\+/g, ' '), 'error');
+      }
+      window.history.replaceState(null, '', '#/auth');
+    }
+  }, [showToast]);
+
   // Supabase Auth listener
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
