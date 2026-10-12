@@ -35,15 +35,43 @@ function OfferPicker({ wantedItem, onSent }) {
     if (!selected) return;
     setSending(true);
     try {
-      unwrap(
-        await supabase.from('trades').insert({
-          initiator_id: session.user.id,
-          receiver_id: wantedItem.user_id,
-          offered_item_id: selected,
-          requested_item_id: wantedItem.id,
-        }),
+      const inserted = unwrap(
+        await supabase
+          .from('trades')
+          .insert({
+            initiator_id: session.user.id,
+            receiver_id: wantedItem.user_id,
+            offered_item_id: selected,
+            requested_item_id: wantedItem.id,
+          })
+          .select('id')
+          .single(),
       );
-      onSent();
+
+      // Check if item owner is a live Liverpool bot
+      let isBot = wantedItem.owner?.is_bot;
+      if (isBot === undefined) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('is_bot')
+          .eq('id', wantedItem.user_id)
+          .maybeSingle();
+        isBot = Boolean(prof?.is_bot);
+      }
+
+      if (isBot) {
+        try {
+          await supabase.rpc('bot_auto_accept_trade', { p_trade_id: inserted.id });
+          showToast(`Offer accepted by @${wantedItem.owner?.username || 'Liverpool trader'}! The chat is open.`);
+          onSent?.(inserted.id);
+          navigate(`/trade/${inserted.id}`);
+          return;
+        } catch (botErr) {
+          console.error('Bot auto-accept error:', botErr);
+        }
+      }
+
+      onSent?.(inserted.id);
     } catch (err) {
       showToast(err.code === '23505' ? "You've already offered that item for this one." : errorMessage(err), 'error');
       setSending(false);

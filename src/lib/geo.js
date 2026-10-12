@@ -11,13 +11,18 @@ export const RADIUS_PRESETS = [
 ];
 
 export const POPULAR_LOCATIONS = [
-  { name: 'London', lat: 51.5074, lng: -0.1278 },
+  { name: 'Liverpool', lat: 53.4084, lng: -2.9916 },
+  { name: 'Baltic Triangle (Liverpool)', lat: 53.3958, lng: -2.9796 },
+  { name: 'Lark Lane / Sefton (Liverpool)', lat: 53.3820, lng: -2.9390 },
+  { name: 'Crosby Beach (Liverpool)', lat: 53.4830, lng: -3.0370 },
+  { name: 'Anfield / Everton (Liverpool)', lat: 53.4308, lng: -2.9608 },
+  { name: 'Allerton / Woolton (Liverpool)', lat: 53.3760, lng: -2.8980 },
   { name: 'Manchester', lat: 53.4808, lng: -2.2426 },
+  { name: 'London', lat: 51.5074, lng: -0.1278 },
   { name: 'Birmingham', lat: 52.4862, lng: -1.8904 },
   { name: 'Leeds', lat: 53.8008, lng: -1.5491 },
   { name: 'Glasgow', lat: 55.8642, lng: -4.2518 },
   { name: 'Edinburgh', lat: 55.9533, lng: -3.1883 },
-  { name: 'Liverpool', lat: 53.4084, lng: -2.9916 },
   { name: 'Bristol', lat: 51.4545, lng: -2.5879 },
   { name: 'Newcastle', lat: 54.9783, lng: -1.6178 },
   { name: 'Sheffield', lat: 53.3811, lng: -1.4701 },

@@ -47,7 +47,7 @@ export default function ExploreView() {
       const saved = localStorage.getItem('switchr_location');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return { name: 'London', lat: 51.5074, lng: -0.1278 };
+    return { name: 'Liverpool', lat: 53.4084, lng: -2.9916 };
   });
 
   const [radius, setRadius] = useState(() => {

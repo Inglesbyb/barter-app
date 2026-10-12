@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRightLeft, Check, CheckCircle2, Clock, Lock, PartyPopper, Send, X, XCircle } from 'lucide-react';
+import { ArrowRightLeft, Check, CheckCircle2, Clock, Lock, PartyPopper, Send, Sparkles, X, XCircle } from 'lucide-react';
 import { supabase, unwrap, TRADE_SELECT } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import ReviewModal from '../components/ReviewModal';
@@ -39,6 +39,7 @@ function TradeRoom({ initial, reload }) {
   const [reviewOpen, setReviewOpen] = useState(initial.trade.status === 'completed' && !initial.myReview);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const bottomRef = useRef(null);
 
   const iAmInitiator = trade.initiator_id === me;
@@ -74,7 +75,7 @@ function TradeRoom({ initial, reload }) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages.length]);
+  }, [messages.length, partnerTyping]);
 
   const run = async (fn, successMsg) => {
     setBusy(true);
@@ -92,6 +93,7 @@ function TradeRoom({ initial, reload }) {
   const rpc = (name) => supabase.rpc(name, { p_trade_id: trade.id }).then(unwrap);
 
   const accept = () => run(() => rpc('accept_trade'), 'Offer accepted! The chat is open.').then(reload);
+  const acceptBot = () => run(() => rpc('bot_auto_accept_trade'), 'Offer accepted! The chat is open.').then(reload);
   const decline = () => run(() => rpc('decline_trade'), 'Offer declined').then(() => navigate('/trades'));
   const cancel = () => {
     const msg =
@@ -122,6 +124,23 @@ function TradeRoom({ initial, reload }) {
         await supabase.from('messages').insert({ trade_id: trade.id, sender_id: me, content }).select().single(),
       );
       setMessages((list) => (list.some((m) => m.id === msg.id) ? list : [...list, msg]));
+
+      // If partner is a live Liverpool bot, simulate typing and reply in real time
+      if (partner?.is_bot) {
+        setPartnerTyping(true);
+        setTimeout(async () => {
+          try {
+            await supabase.rpc('bot_reply_to_trade', {
+              p_trade_id: trade.id,
+              p_user_message: content,
+            });
+          } catch (botErr) {
+            console.error('Bot reply error:', botErr);
+          } finally {
+            setPartnerTyping(false);
+          }
+        }, 1400);
+      }
     } catch (err) {
       setDraft(content);
       showToast(errorMessage(err), 'error');
@@ -140,8 +159,19 @@ function TradeRoom({ initial, reload }) {
               <button type="button" onClick={() => navigate(`/profile/${partner.id}`)} className="flex items-center gap-2.5 text-left">
                 <Avatar name={partner.username} size={38} />
                 <div>
-                  <p className="text-xs text-muted">Trading with</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs text-muted">Trading with</p>
+                    {partner?.is_bot && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        Live Liverpool Bot
+                      </span>
+                    )}
+                  </div>
                   <p className="font-semibold hover:text-brand">@{partner.username}</p>
+                  {partner?.location_name && (
+                    <p className="text-[11px] text-muted">📍 {partner.location_name}</p>
+                  )}
                 </div>
               </button>
               <StatusBadge status={trade.status} />
@@ -165,6 +195,7 @@ function TradeRoom({ initial, reload }) {
             myScore={myScore}
             busy={busy}
             onAccept={accept}
+            onAcceptBot={acceptBot}
             onDecline={decline}
             onCancel={cancel}
             onConfirm={confirm}
@@ -215,8 +246,59 @@ function TradeRoom({ initial, reload }) {
                 </motion.div>
               );
             })}
+            {partnerTyping && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 py-1"
+              >
+                <Avatar name={partner.username} size={24} />
+                <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-line bg-white px-3.5 py-2 text-xs text-muted shadow-xs">
+                  <span className="font-medium text-ink-soft">@{partner.username} is typing</span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand" style={{ animationDelay: '0ms' }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand" style={{ animationDelay: '150ms' }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand" style={{ animationDelay: '300ms' }} />
+                  </span>
+                </div>
+              </motion.div>
+            )}
             <div ref={bottomRef} />
           </div>
+
+          {chatOpen && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-line/60 bg-canvas/40 px-3 py-2 text-xs">
+              <span className="text-[11px] font-medium text-muted">Quick test:</span>
+              <button
+                type="button"
+                onClick={() => setDraft('Where can we meet in Liverpool?')}
+                className="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-soft transition hover:border-brand hover:text-brand"
+              >
+                📍 Where can we meet?
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft('What condition is it in?')}
+                className="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-soft transition hover:border-brand hover:text-brand"
+              >
+                ✨ What condition?
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft('When are you free to swap?')}
+                className="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-soft transition hover:border-brand hover:text-brand"
+              >
+                🕒 When are you free?
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft('Sounds boss mate!')}
+                className="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-soft transition hover:border-brand hover:text-brand"
+              >
+                🤝 Sounds boss mate!
+              </button>
+            </div>
+          )}
 
           <form onSubmit={send} className="flex gap-2 border-t border-line bg-white p-3">
             <input
@@ -272,7 +354,7 @@ function SwapItem({ label, item }) {
   );
 }
 
-function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, myScore, busy, onAccept, onDecline, onCancel, onConfirm, onRate }) {
+function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, myScore, busy, onAccept, onAcceptBot, onDecline, onCancel, onConfirm, onRate }) {
   const box = 'card p-5';
 
   if (trade.status === 'pending') {
@@ -281,7 +363,21 @@ function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, 
         <p className="flex items-center gap-2 font-semibold">
           <Clock size={18} className="text-brand" /> Waiting for @{partner.username}
         </p>
-        <p className="mt-1 text-sm text-ink-soft">You'll be able to chat as soon as they accept.</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          {partner?.is_bot
+            ? `@${partner.username} is a live Liverpool bot. Trigger auto-accept to open the chat.`
+            : "You'll be able to chat as soon as they accept."}
+        </p>
+        {partner?.is_bot && (
+          <button
+            type="button"
+            className="btn-primary mt-3 w-full"
+            onClick={onAcceptBot}
+            disabled={busy}
+          >
+            ⚡ Auto-accept offer as @{partner.username}
+          </button>
+        )}
         <button id="trade-withdraw" type="button" className="btn-ghost mt-3 px-0 text-bad" onClick={onCancel} disabled={busy}>
           Withdraw offer
         </button>

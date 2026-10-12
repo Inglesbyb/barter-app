@@ -18,11 +18,11 @@ export const TRADE_SELECT = `
   *,
   offered:items!trades_offered_item_id_fkey(*),
   requested:items!trades_requested_item_id_fkey(*),
-  initiator:profiles!trades_initiator_id_fkey(id, username, location_name, lat, lng),
-  receiver:profiles!trades_receiver_id_fkey(id, username, location_name, lat, lng)
+  initiator:profiles!trades_initiator_id_fkey(id, username, location_name, lat, lng, is_bot),
+  receiver:profiles!trades_receiver_id_fkey(id, username, location_name, lat, lng, is_bot)
 `;
 
-export const ITEM_SELECT = '*, owner:profiles(id, username, location_name, lat, lng)';
+export const ITEM_SELECT = '*, owner:profiles(id, username, location_name, lat, lng, is_bot)';
 
 export async function uploadItemImage(userId, file) {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
