@@ -16,7 +16,9 @@ export default function OfferSwipeView({ itemId }) {
   const { session, profile, showToast } = useApp();
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
-  const cardRef = useRef(null);
+  // Swipe handles keyed by trade id. AnimatePresence keeps the previous card mounted
+  // while it exits, so a single shared ref would be nulled by that card's unmount.
+  const handles = useRef({});
 
   const { data, loading, error, reload } = useQuery(async () => {
     const [item, rawOffers] = await Promise.all([
@@ -66,7 +68,13 @@ export default function OfferSwipeView({ itemId }) {
       setIndex((i) => i + 1);
       return true;
     } catch (err) {
-      showToast(errorMessage(err), 'error');
+      const msg = errorMessage(err);
+      showToast(msg, 'error');
+      if (/no longer pending|not found|no longer available/i.test(msg)) {
+        // Deck is stale (offer already handled/withdrawn) - refresh it.
+        setIndex(0);
+        reload();
+      }
       return false;
     } finally {
       setBusy(false);
@@ -112,7 +120,10 @@ export default function OfferSwipeView({ itemId }) {
             <AnimatePresence initial={false}>
               <SwipeCard
                 key={current.id}
-                ref={cardRef}
+                ref={(h) => {
+                  if (h) handles.current[current.id] = h;
+                  else delete handles.current[current.id];
+                }}
                 trade={current}
                 stats={stats[current.initiator_id]}
                 userLocation={profile}
@@ -128,7 +139,7 @@ export default function OfferSwipeView({ itemId }) {
               id="swipe-decline"
               aria-label="Decline offer"
               disabled={busy}
-              onClick={() => cardRef.current?.swipe('left')}
+              onClick={() => handles.current[current.id]?.swipe('left')}
               className="flex h-16 w-16 items-center justify-center rounded-full border border-line bg-white text-bad shadow-card transition hover:scale-105 hover:bg-bad hover:text-white active:scale-95 disabled:opacity-50"
             >
               <X size={28} strokeWidth={2.6} />
@@ -138,7 +149,7 @@ export default function OfferSwipeView({ itemId }) {
               id="swipe-accept"
               aria-label="Accept offer"
               disabled={busy}
-              onClick={() => cardRef.current?.swipe('right')}
+              onClick={() => handles.current[current.id]?.swipe('right')}
               className="flex h-20 w-20 items-center justify-center rounded-full bg-linear-to-br from-ok to-[#0ca678] text-white shadow-lift transition hover:scale-105 active:scale-95 disabled:opacity-50"
             >
               <Check size={34} strokeWidth={2.8} />
