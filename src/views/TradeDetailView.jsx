@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRightLeft, Check, CheckCircle2, Clock, Lock, PartyPopper, Send, Sparkles, X, XCircle } from 'lucide-react';
-import { supabase, unwrap, TRADE_SELECT } from '../lib/supabase';
+import { ArrowRightLeft, Check, CheckCircle2, Clock, Image as ImageIcon, Lock, PartyPopper, Send, Sparkles, X, XCircle } from 'lucide-react';
+import { supabase, unwrap, uploadChatImage, TRADE_SELECT } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import ReviewModal from '../components/ReviewModal';
 import { Avatar, BackButton, ErrorBox, ItemImage, PageLoader, Spinner, Stars, StatusBadge } from '../components/ui';
@@ -40,7 +40,11 @@ function TradeRoom({ initial, reload }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const iAmInitiator = trade.initiator_id === me;
   const partner = iAmInitiator ? trade.receiver : trade.initiator;
@@ -114,14 +118,53 @@ function TradeRoom({ initial, reload }) {
     reload();
   };
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('Image must be under 8MB', 'error');
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const send = async (e) => {
     e.preventDefault();
     const content = draft.trim();
-    if (!content || !chatOpen) return;
+    if ((!content && !imageFile) || !chatOpen || uploadingImage) return;
+
+    let imageUrl = null;
+    const currentFile = imageFile;
+    const currentText = content;
+
     setDraft('');
+    clearImage();
+
     try {
+      if (currentFile) {
+        setUploadingImage(true);
+        imageUrl = await uploadChatImage(me, currentFile);
+      }
+
       const msg = unwrap(
-        await supabase.from('messages').insert({ trade_id: trade.id, sender_id: me, content }).select().single(),
+        await supabase
+          .from('messages')
+          .insert({
+            trade_id: trade.id,
+            sender_id: me,
+            content: currentText || (imageUrl ? 'Sent a photo' : ''),
+            image_url: imageUrl,
+          })
+          .select()
+          .single(),
       );
       setMessages((list) => (list.some((m) => m.id === msg.id) ? list : [...list, msg]));
 
@@ -132,7 +175,7 @@ function TradeRoom({ initial, reload }) {
           try {
             await supabase.rpc('bot_reply_to_trade', {
               p_trade_id: trade.id,
-              p_user_message: content,
+              p_user_message: currentText || (imageUrl ? 'photo' : ''),
             });
           } catch (botErr) {
             console.error('Bot reply error:', botErr);
@@ -142,8 +185,10 @@ function TradeRoom({ initial, reload }) {
         }, 1400);
       }
     } catch (err) {
-      setDraft(content);
+      if (currentText) setDraft(currentText);
       showToast(errorMessage(err), 'error');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -240,7 +285,24 @@ function TradeRoom({ initial, reload }) {
                       mine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md border border-line bg-white text-ink'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                    {m.image_url && (
+                      <a
+                        href={m.image_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mb-1.5 block overflow-hidden rounded-xl transition hover:opacity-95"
+                      >
+                        <img
+                          src={m.image_url}
+                          alt="Attachment"
+                          className="max-h-60 w-full rounded-xl object-cover"
+                          loading="lazy"
+                        />
+                      </a>
+                    )}
+                    {m.content && (!m.image_url || m.content !== 'Sent a photo') && (
+                      <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                    )}
                     <p className={`mt-0.5 text-[10px] ${mine ? 'text-white/60' : 'text-muted'}`}>{timeAgo(m.created_at)}</p>
                   </div>
                 </motion.div>
@@ -300,19 +362,65 @@ function TradeRoom({ initial, reload }) {
             </div>
           )}
 
-          <form onSubmit={send} className="flex gap-2 border-t border-line bg-white p-3">
+          {imagePreview && (
+            <div className="flex items-center justify-between border-t border-line/60 bg-canvas/60 px-4 py-2">
+              <div className="flex items-center gap-2.5">
+                <img src={imagePreview} alt="Preview" className="h-12 w-12 rounded-lg border border-line object-cover" />
+                <div className="text-xs">
+                  <p className="max-w-[200px] truncate font-medium text-ink">{imageFile?.name}</p>
+                  <p className="text-[10px] text-muted">{uploadingImage ? 'Uploading photo...' : 'Photo attached'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearImage}
+                disabled={uploadingImage}
+                className="rounded-full p-1 text-muted hover:bg-white hover:text-bad"
+                title="Remove photo"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={send} className="flex items-center gap-2 border-t border-line bg-white p-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageSelect}
+              disabled={!chatOpen || uploadingImage}
+            />
+            <button
+              id="chat-attach-photo"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-line text-ink-soft transition hover:border-brand hover:text-brand disabled:opacity-50"
+              disabled={!chatOpen || uploadingImage}
+              title="Attach a photo"
+              aria-label="Attach photo"
+            >
+              <ImageIcon size={19} />
+            </button>
             <input
               id="chat-input"
-              className="field"
+              className="field flex-1"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={chatOpen ? 'Write a message…' : 'Chat is closed'}
-              disabled={!chatOpen}
+              placeholder={chatOpen ? (imageFile ? 'Add a message or send photo…' : 'Write a message…') : 'Chat is closed'}
+              disabled={!chatOpen || uploadingImage}
               maxLength={2000}
               autoComplete="off"
             />
-            <button id="chat-send" type="submit" className="btn-primary px-3.5" disabled={!chatOpen || !draft.trim()} aria-label="Send">
-              <Send size={17} />
+            <button
+              id="chat-send"
+              type="submit"
+              className="btn-primary px-3.5"
+              disabled={!chatOpen || (!draft.trim() && !imageFile) || uploadingImage}
+              aria-label="Send"
+            >
+              {uploadingImage ? <Spinner className="h-4 w-4 text-white" /> : <Send size={17} />}
             </button>
           </form>
         </section>

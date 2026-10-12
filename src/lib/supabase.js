@@ -31,6 +31,13 @@ export async function uploadItemImage(userId, file) {
   return supabase.storage.from('item-images').getPublicUrl(path).data.publicUrl;
 }
 
+export async function uploadChatImage(userId, file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `${userId}/chat-${crypto.randomUUID()}.${ext}`;
+  unwrap(await supabase.storage.from('item-images').upload(path, file, { contentType: file.type }));
+  return supabase.storage.from('item-images').getPublicUrl(path).data.publicUrl;
+}
+
 export async function getProfileStats(userId) {
   const rows = unwrap(await supabase.rpc('get_profile_stats', { p_user_id: userId }));
   const row = rows?.[0] ?? {};
