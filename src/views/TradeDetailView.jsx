@@ -75,7 +75,7 @@ function TradeRoom({ initial, reload }) {
             markTradeAsRead(trade.id);
             if (typeof document !== 'undefined' && document.hidden) {
               showBrowserNotification(
-                `@${partner.username} on SwitchR`,
+                `@${partner?.username || 'trader'} on SwitchR`,
                 msg.content || (msg.image_url ? '📷 Sent a photo' : 'New message'),
                 () => window.focus(),
               );
@@ -154,7 +154,7 @@ function TradeRoom({ initial, reload }) {
       showToast('Trade complete!');
       setReviewOpen(true);
     } else if (result === 'waiting') {
-      showToast(`Confirmed. Waiting for @${partner.username}.`);
+      showToast(`Confirmed. Waiting for @${partner?.username || 'trader'}.`);
     }
     reload();
   };
@@ -242,8 +242,8 @@ function TradeRoom({ initial, reload }) {
         <section className="space-y-4">
           <div className="card p-5">
             <div className="mb-4 flex items-center justify-between">
-              <button type="button" onClick={() => navigate(`/profile/${partner.id}`)} className="flex items-center gap-2.5 text-left">
-                <Avatar name={partner.username} size={38} />
+              <button type="button" onClick={() => partner?.id && navigate(`/profile/${partner.id}`)} className="flex items-center gap-2.5 text-left">
+                <Avatar name={partner?.username || 'trader'} size={38} />
                 <div>
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs text-muted">Trading with</p>
@@ -254,7 +254,7 @@ function TradeRoom({ initial, reload }) {
                       </span>
                     )}
                   </div>
-                  <p className="font-semibold hover:text-brand">@{partner.username}</p>
+                  <p className="font-semibold hover:text-brand">@{partner?.username || 'trader'}</p>
                   {partner?.location_name && (
                     <p className="text-[11px] text-muted">📍 {partner.location_name}</p>
                   )}
@@ -354,7 +354,7 @@ function TradeRoom({ initial, reload }) {
                 {chatOpen ? (
                   <>
                     <PartyPopper className="mb-2 text-brand" size={28} />
-                    Offer accepted! Say hello to @{partner.username}.
+                    Offer accepted! Say hello to @{partner?.username || 'trader'}.
                   </>
                 ) : (
                   <>
@@ -407,9 +407,9 @@ function TradeRoom({ initial, reload }) {
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-center gap-2 py-1"
               >
-                <Avatar name={partner.username} size={24} />
+                <Avatar name={partner?.username || 'trader'} size={24} />
                 <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-line bg-white px-3.5 py-2 text-xs text-muted shadow-xs">
-                  <span className="font-medium text-ink-soft">@{partner.username} is typing</span>
+                  <span className="font-medium text-ink-soft">@{partner?.username || 'trader'} is typing</span>
                   <span className="flex items-center gap-1">
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand" style={{ animationDelay: '0ms' }} />
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand" style={{ animationDelay: '150ms' }} />
@@ -562,11 +562,11 @@ function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, 
     return iAmInitiator ? (
       <div className={box}>
         <p className="flex items-center gap-2 font-semibold">
-          <Clock size={18} className="text-brand" /> Waiting for @{partner.username}
+          <Clock size={18} className="text-brand" /> Waiting for @{partner?.username || 'trader'}
         </p>
         <p className="mt-1 text-sm text-ink-soft">
           {partner?.is_bot
-            ? `@${partner.username} is a live Liverpool bot. Trigger auto-accept to open the chat.`
+            ? `@${partner?.username} is a live Liverpool bot. Trigger auto-accept to open the chat.`
             : "You'll be able to chat as soon as they accept."}
         </p>
         {partner?.is_bot && (
@@ -576,7 +576,7 @@ function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, 
             onClick={onAcceptBot}
             disabled={busy}
           >
-            ⚡ Auto-accept offer as @{partner.username}
+            ⚡ Auto-accept offer as @{partner?.username}
           </button>
         )}
         <button id="trade-withdraw" type="button" className="btn-ghost mt-3 px-0 text-bad" onClick={onCancel} disabled={busy}>
@@ -585,7 +585,7 @@ function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, 
       </div>
     ) : (
       <div className={box}>
-        <p className="font-semibold">@{partner.username} wants to swap with you</p>
+        <p className="font-semibold">@{partner?.username || 'trader'} wants to swap with you</p>
         <p className="mt-1 text-sm text-ink-soft">Accepting opens the chat and declines other offers on these items.</p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button id="trade-decline" type="button" className="btn-secondary" onClick={onDecline} disabled={busy}>
@@ -605,14 +605,14 @@ function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, 
         {iConfirmed ? (
           <>
             <p className="flex items-center gap-2 font-semibold">
-              <Clock size={18} className="text-brand" /> Waiting for @{partner.username} to confirm
+              <Clock size={18} className="text-brand" /> Waiting for @{partner?.username || 'trader'} to confirm
             </p>
             <p className="mt-1 text-sm text-ink-soft">The trade completes when you've both confirmed.</p>
           </>
         ) : (
           <>
             <p className="font-semibold">
-              {theyConfirmed ? `@${partner.username} has confirmed the swap` : 'Swapped your items?'}
+              {theyConfirmed ? `@${partner?.username || 'trader'} has confirmed the swap` : 'Swapped your items?'}
             </p>
             <p className="mt-1 text-sm text-ink-soft">
               {theyConfirmed
@@ -639,11 +639,11 @@ function StatusPanel({ trade, iAmInitiator, partner, iConfirmed, theyConfirmed, 
         </p>
         {myScore ? (
           <p className="mt-2 flex items-center gap-2 text-sm text-ink-soft">
-            You rated @{partner.username} <Stars value={myScore} />
+            You rated @{partner?.username || 'trader'} <Stars value={myScore} />
           </p>
         ) : (
           <button id="trade-rate" type="button" className="btn-primary mt-4 w-full" onClick={onRate}>
-            Rate @{partner.username}
+            Rate @{partner?.username || 'trader'}
           </button>
         )}
       </div>
