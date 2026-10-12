@@ -52,6 +52,12 @@ export default function AuthView() {
 
     setBusy(true);
     try {
+      // Always redirect to live production Vercel app so email links work on phones
+      const redirectUrl =
+        typeof window !== 'undefined' && window.location.origin.includes('vercel.app')
+          ? window.location.origin
+          : 'https://barter-app-pearl.vercel.app';
+
       if (mode === 'signin') {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
@@ -59,7 +65,7 @@ export default function AuthView() {
         const { data, error: err } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { username }, emailRedirectTo: window.location.origin },
+          options: { data: { username }, emailRedirectTo: redirectUrl },
         });
         if (err) throw err;
         if (!data.session) {
@@ -68,7 +74,7 @@ export default function AuthView() {
         }
       } else {
         const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin,
+          redirectTo: redirectUrl,
         });
         if (err) throw err;
         setNotice(`If an account exists for ${email}, a password reset link is on its way.`);
