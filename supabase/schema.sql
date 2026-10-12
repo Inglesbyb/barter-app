@@ -254,6 +254,37 @@ CREATE POLICY "reviews: rate your trading partner after completion"
 
 
 -- ------------------------------------------------------------------------------
+-- 5.5 SWIPES (Explore feed swipes: save / skip)
+-- ------------------------------------------------------------------------------
+CREATE TABLE public.swipes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  item_id    UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
+  action     TEXT NOT NULL CHECK (action IN ('save', 'skip')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, item_id)
+);
+
+CREATE INDEX swipes_user_idx ON public.swipes (user_id, action);
+
+ALTER TABLE public.swipes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "swipes: user can read own"
+  ON public.swipes FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "swipes: user can insert own"
+  ON public.swipes FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "swipes: user can update own"
+  ON public.swipes FOR UPDATE
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "swipes: user can delete own"
+  ON public.swipes FOR DELETE USING (auth.uid() = user_id);
+
+
+
+-- ------------------------------------------------------------------------------
 -- 6. TRADE FUNCTIONS (the only way trade status changes)
 -- ------------------------------------------------------------------------------
 

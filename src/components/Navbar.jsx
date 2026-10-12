@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Compass, ArrowRightLeft, Plus, User } from 'lucide-react';
+import { Compass, Flame, ArrowRightLeft, Plus, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { navigate, useApp } from '../lib/core';
 import { Avatar } from './ui';
@@ -42,6 +42,7 @@ export default function Navbar({ currentPath }) {
 
   const navItems = [
     { label: 'Browse', path: '/', icon: Compass, id: 'nav-browse' },
+    { label: 'Explore', path: '/explore', icon: Flame, id: 'nav-explore' },
     {
       label: 'Trades',
       path: '/trades',
@@ -81,6 +82,17 @@ export default function Navbar({ currentPath }) {
               }`}
             >
               <Compass size={17} /> Browse
+            </button>
+
+            <button
+              type="button"
+              id="nav-desktop-explore"
+              onClick={() => navigate('/explore')}
+              className={`btn-ghost rounded-xl px-3.5 py-2 text-sm font-semibold ${
+                isCurrent('/explore') ? 'bg-ink/5 text-ink' : 'text-ink-soft'
+              }`}
+            >
+              <Flame size={17} className={isCurrent('/explore') ? 'text-coral fill-coral' : 'text-coral'} /> Explore
             </button>
 
             <button

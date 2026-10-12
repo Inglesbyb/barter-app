@@ -16,6 +16,7 @@ import TradesView from './views/TradesView';
 import OfferSwipeView from './views/OfferSwipeView';
 import TradeDetailView from './views/TradeDetailView';
 import ProfileView from './views/ProfileView';
+import ExploreView from './views/ExploreView';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -111,6 +112,9 @@ export default function App() {
 
     if (root === 'item' && id) {
       return <ItemDetailView itemId={id} />;
+    }
+    if (root === 'explore') {
+      return <ExploreView />;
     }
     if (root === 'new') {
       return <ListItemView />;
