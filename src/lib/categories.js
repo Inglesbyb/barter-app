@@ -9,6 +9,8 @@ import {
   BookOpen,
   Wrench,
   Palette,
+  Puzzle,
+  Package,
 } from 'lucide-react';
 
 export const CATEGORY_DEFINITIONS = [
@@ -131,14 +133,36 @@ export const CATEGORY_DEFINITIONS = [
     label: 'Hobbies & Collectibles',
     shortLabel: 'Hobbies',
     icon: Palette,
-    description: 'Instruments, Lego, board games, crafts',
+    description: 'Instruments, art, craft supplies & collectibles',
     keywords: [
       'guitar', 'fender', 'gibson', 'taylor', 'squier', 'ukulele', 'piano',
       'keyboard', 'synth', 'synthesizer', 'korg', 'roland', 'arturia', 'akai',
-      'pedal', 'amp', 'amplifier', 'drum', 'board game', 'catan', 'wingspan',
-      'gloomhaven', 'pandemic', 'everdell', 'lego', 'warhammer', 'miniatures',
-      'craft', 'art', 'paint', 'easel', 'pottery', 'collectibles', 'music',
-      'ticket to ride', 'terraforming mars',
+      'pedal', 'amp', 'amplifier', 'drum', 'craft', 'art', 'paint', 'easel',
+      'pottery', 'collectibles', 'music', 'sewing', 'knitting',
+    ],
+  },
+  {
+    id: 'Toys & Games',
+    label: 'Toys & Games',
+    shortLabel: 'Toys',
+    icon: Puzzle,
+    description: 'Board games, Lego, puzzles, action figures & dolls',
+    keywords: [
+      'toy', 'toys', 'lego', 'puzzle', 'puzzles', 'figure', 'action figure',
+      'doll', 'dolls', 'funko', 'pop', 'teddies', 'teddy', 'plush', 'barbie',
+      'nerf', 'playmobil', 'hot wheels', 'board game', 'catan', 'monopoly',
+      'wingspan', 'gloomhaven', 'pandemic', 'everdell', 'warhammer', 'miniatures',
+      'ticket to ride', 'terraforming mars', 'card game', 'boardgame',
+    ],
+  },
+  {
+    id: 'Other',
+    label: 'Other',
+    shortLabel: 'Other',
+    icon: Package,
+    description: 'Unique items, bundles & miscellaneous treasures',
+    keywords: [
+      'other', 'misc', 'miscellaneous', 'random', 'bundle', 'various', 'job lot',
     ],
   },
 ];
@@ -177,17 +201,19 @@ export function suggestCategory(title) {
  * Normalizes legacy category names into new definitions if needed.
  */
 export function normalizeCategory(name) {
-  if (!name) return 'Hobbies & Collectibles';
+  if (!name) return 'Other';
   const map = {
     Electronics: 'Tech & Electronics',
     Clothing: 'Clothing & Fashion',
     Home: 'Home & Living',
+    'Home & Garden': 'Home & Living',
     Books: 'Books & Media',
     Sports: 'Sports & Fitness',
     Tools: 'Tools & DIY',
-    'Toys & Games': 'Hobbies & Collectibles',
+    'Toys & Games': 'Toys & Games',
+    Toys: 'Toys & Games',
     Music: 'Hobbies & Collectibles',
-    Other: 'Hobbies & Collectibles',
+    Other: 'Other',
   };
   return map[name] || name;
 }
