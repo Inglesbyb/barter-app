@@ -27,10 +27,10 @@ export default function InteractiveRadiusMap({
         attributionControl: false,
       });
 
-      // CartoDB Voyager tiles (clean, modern, light aesthetic)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
+      // OpenStreetMap tiles (100% free, zero watermark, zero API key required)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
 
       // Add top-right minimalist zoom control
