@@ -25,7 +25,7 @@ const STEPS = [
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
-export default function AuthView() {
+export default function AuthView({ onOpenLegal }) {
   const [mode, setMode] = useState('signin'); // signin | signup | forgot
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -245,6 +245,37 @@ export default function AuthView() {
               </>
             )}
           </p>
+
+          <div className="mt-8 border-t border-line/60 pt-4 text-center text-xs text-muted">
+            <p>
+              By using SwitchR, you agree to our{' '}
+              <button
+                type="button"
+                onClick={() => onOpenLegal?.('terms')}
+                className="font-medium text-ink-soft hover:text-brand underline underline-offset-2"
+              >
+                Terms of Service
+              </button>
+              {' '}and{' '}
+              <button
+                type="button"
+                onClick={() => onOpenLegal?.('privacy')}
+                className="font-medium text-ink-soft hover:text-brand underline underline-offset-2"
+              >
+                Privacy Policy
+              </button>
+              .
+            </p>
+            <p className="mt-2 text-[11px]">
+              <button
+                type="button"
+                onClick={() => onOpenLegal?.('cookies')}
+                className="hover:text-brand hover:underline"
+              >
+                Cookie & Storage Settings
+              </button>
+            </p>
+          </div>
         </motion.div>
       </section>
     </main>

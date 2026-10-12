@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft, ShieldAlert } from 'lucide-react';
+import { MapPin, Calendar, Package, Star, Edit3, LogOut, PackageSearch, Plus, Navigation, Bookmark, Trash2, ArrowRightLeft, ShieldAlert, Cookie } from 'lucide-react';
 import { supabase, unwrap, getProfileStats, deleteMyAccount } from '../lib/supabase';
 import { errorMessage, navigate, timeAgo, useApp, useQuery } from '../lib/core';
 import { getCurrentPosition, POPULAR_LOCATIONS } from '../lib/geo';
@@ -10,7 +10,7 @@ import TradeOfferModal from '../components/TradeOfferModal';
 import { Avatar, BackButton, EmptyState, ErrorBox, ItemImage, PageLoader, Spinner, Stars } from '../components/ui';
 
 export default function ProfileView({ userId }) {
-  const { session, showToast, setProfile } = useApp();
+  const { session, showToast, setProfile, openLegal } = useApp();
   const currentUserId = session.user.id;
   const targetId = userId || currentUserId;
   const isMine = targetId === currentUserId;
@@ -534,6 +534,7 @@ export default function ProfileView({ userId }) {
           open={editOpen}
           onClose={() => setEditOpen(false)}
           profile={profile}
+          onOpenLegal={openLegal}
           onSaved={(updated) => {
             setEditOpen(false);
             if (updated) setProfile((prev) => ({ ...prev, ...updated }));
@@ -546,7 +547,7 @@ export default function ProfileView({ userId }) {
   );
 }
 
-function EditProfileModal({ open, onClose, profile, onSaved }) {
+function EditProfileModal({ open, onClose, profile, onSaved, onOpenLegal }) {
   const [username, setUsername] = useState(profile.username || '');
   const [locationName, setLocationName] = useState(profile.location_name || '');
   const [lat, setLat] = useState(profile.lat || null);
@@ -700,12 +701,20 @@ function EditProfileModal({ open, onClose, profile, onSaved }) {
         <div className="mt-6 border-t border-line/70 pt-4">
           <p className="text-xs font-semibold text-ink">Privacy & Account Security</p>
           <p className="mt-0.5 text-[11px] text-muted">
-            Permanently delete your account, listings, messages, reviews, and personal data (GDPR / SOC 2 Right to Erasure).
+            Manage your cookie preferences or permanently delete your account (UK GDPR & PECR compliant).
           </p>
-          <button
-            type="button"
-            id="delete-account-btn"
-            onClick={async () => {
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onOpenLegal?.('cookies')}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-canvas px-3 py-2 text-xs font-semibold text-ink transition hover:bg-white"
+            >
+              <Cookie size={14} className="text-brand" /> Privacy & Cookie Settings
+            </button>
+            <button
+              type="button"
+              id="delete-account-btn"
+              onClick={async () => {
               const confirmed = window.confirm(
                 'Are you sure you want to permanently delete your account?\n\nThis will permanently erase your profile, all listings, chats, and trade history. This action cannot be undone.'
               );
@@ -721,10 +730,11 @@ function EditProfileModal({ open, onClose, profile, onSaved }) {
               }
             }}
             disabled={busy}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs font-semibold text-bad transition hover:bg-bad-soft"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs font-semibold text-bad transition hover:bg-bad-soft"
           >
             <ShieldAlert size={14} /> Delete account & erase all data
           </button>
+          </div>
         </div>
       </form>
     </Modal>

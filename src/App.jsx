@@ -18,6 +18,8 @@ import TradeDetailView from './views/TradeDetailView';
 import ProfileView from './views/ProfileView';
 import ExploreView from './views/ExploreView';
 import NotificationBanner from './components/NotificationBanner';
+import CookieBanner from './components/CookieBanner';
+import LegalModal from './components/LegalModal';
 import { playMessageSound, playTradeAlertSound, showBrowserNotification, markTradeAsRead } from './lib/notifications';
 import { navigate } from './lib/core';
 
@@ -28,6 +30,13 @@ export default function App() {
   const [isRecovery, setIsRecovery] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [incomingNotifs, setIncomingNotifs] = useState([]);
+  const [legalOpen, setLegalOpen] = useState(false);
+  const [legalTab, setLegalTab] = useState('privacy');
+
+  const openLegal = useCallback((tab = 'privacy') => {
+    setLegalTab(tab);
+    setLegalOpen(true);
+  }, []);
 
   const { path, parts } = useRoute();
 
@@ -271,7 +280,17 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthView />;
+    return (
+      <>
+        <AuthView onOpenLegal={openLegal} />
+        <CookieBanner onOpenLegal={openLegal} />
+        <LegalModal
+          open={legalOpen}
+          initialTab={legalTab}
+          onClose={() => setLegalOpen(false)}
+        />
+      </>
+    );
   }
 
   // Active route renderer
@@ -309,7 +328,7 @@ export default function App() {
   };
 
   return (
-    <AppContext.Provider value={{ session, profile, setProfile, showToast }}>
+    <AppContext.Provider value={{ session, profile, setProfile, showToast, openLegal }}>
       <div className="min-h-dvh flex flex-col">
         <Navbar currentPath={path} />
 
@@ -319,10 +338,50 @@ export default function App() {
           </ErrorBoundary>
         </main>
 
+        {/* Global Footer with Persistent Legal & Cookie Links */}
+        <footer className="mt-auto border-t border-line/60 bg-white/40 py-6 text-center text-xs text-muted">
+          <div className="mx-auto max-w-6xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p>© {new Date().getFullYear()} SwitchR. Peer-to-peer barter marketplace.</p>
+            <div className="flex items-center gap-4 text-[11px] font-medium">
+              <button
+                type="button"
+                onClick={() => openLegal('privacy')}
+                className="hover:text-brand hover:underline"
+              >
+                Privacy Policy
+              </button>
+              <button
+                type="button"
+                onClick={() => openLegal('terms')}
+                className="hover:text-brand hover:underline"
+              >
+                Terms of Service
+              </button>
+              <button
+                type="button"
+                onClick={() => openLegal('cookies')}
+                className="hover:text-brand hover:underline"
+              >
+                Cookie Settings
+              </button>
+            </div>
+          </div>
+        </footer>
+
         {/* Interactive Floating Incoming Message Notification Banner */}
         <NotificationBanner
           notifications={incomingNotifs}
           onDismiss={(id) => setIncomingNotifs((prev) => prev.filter((n) => n.id !== id))}
+        />
+
+        {/* Floating Cookie Consent Banner */}
+        <CookieBanner onOpenLegal={openLegal} />
+
+        {/* Legal, Privacy & Cookie Policy Modal */}
+        <LegalModal
+          open={legalOpen}
+          initialTab={legalTab}
+          onClose={() => setLegalOpen(false)}
         />
 
         {/* Global Toast Container */}
