@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Search, PackageSearch, Plus, X, MapPin, SlidersHorizontal, LayoutGrid } from 'lucide-react';
+import { Search, PackageSearch, Plus, X, MapPin, SlidersHorizontal, LayoutGrid, Sparkles } from 'lucide-react';
 import { supabase, unwrap, ITEM_SELECT } from '../lib/supabase';
 import { CATEGORIES, navigate, useApp, useQuery } from '../lib/core';
 import { getCategoryIcon } from '../lib/categories';
-import { calculateDistance } from '../lib/geo';
+import { calculateDistance, extractPostcode, lookupLocationOrPostcode } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
 import DistanceFilterModal from '../components/DistanceFilterModal';
-import { EmptyState, ErrorBox, PageLoader } from '../components/ui';
+import { EmptyState, ErrorBox, PageLoader, Spinner } from '../components/ui';
 
 export default function FeedView() {
   const { session, profile } = useApp();
@@ -45,6 +45,11 @@ export default function FeedView() {
 
   const [distanceModalOpen, setDistanceModalOpen] = useState(false);
 
+  // Smart Postcode Detection state
+  const [detectedLocation, setDetectedLocation] = useState(null);
+  const [detectedCandidate, setDetectedCandidate] = useState(null);
+  const [postcodeLoading, setPostcodeLoading] = useState(false);
+
   // Sync profile location if loaded
   useEffect(() => {
     if (profile?.lat != null) {
@@ -74,6 +79,61 @@ export default function FeedView() {
     try {
       localStorage.setItem('switchr_sort', sort);
     } catch {}
+  };
+
+  // Check if search contains a UK postcode or outcode
+  useEffect(() => {
+    const candidate = extractPostcode(search);
+    if (!candidate) {
+      setDetectedLocation(null);
+      setDetectedCandidate(null);
+      return;
+    }
+
+    setDetectedCandidate(candidate);
+    let active = true;
+    setPostcodeLoading(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const resolved = await lookupLocationOrPostcode(candidate.postcode);
+        if (active && resolved) {
+          setDetectedLocation(resolved);
+        } else if (active) {
+          setDetectedLocation(null);
+        }
+      } catch {
+        if (active) setDetectedLocation(null);
+      } finally {
+        if (active) setPostcodeLoading(false);
+      }
+    }, 200);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [search]);
+
+  const handleApplyDetectedPostcode = () => {
+    if (!detectedLocation) return;
+    handleLocationChange({
+      name: detectedLocation.name,
+      lat: detectedLocation.lat,
+      lng: detectedLocation.lng,
+    });
+    if (radius == null) {
+      handleRadiusChange(15);
+    }
+    handleSortChange('closest');
+
+    if (detectedCandidate?.query) {
+      setSearch(detectedCandidate.query);
+    } else {
+      setSearch('');
+    }
+    setDetectedLocation(null);
+    setDetectedCandidate(null);
   };
 
   useEffect(() => {
@@ -150,7 +210,13 @@ export default function FeedView() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search items, categories, or locations (e.g. Manchester, Camden)…"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && detectedLocation) {
+                e.preventDefault();
+                handleApplyDetectedPostcode();
+              }
+            }}
+            placeholder="Search items, or type a UK postcode (e.g. M1, SW1A, BS1)…"
             className="field rounded-2xl py-3.5 pl-11 pr-10 text-base shadow-card"
           />
           {search && (
@@ -186,6 +252,49 @@ export default function FeedView() {
           <SlidersHorizontal size={14} className="text-muted ml-0.5" />
         </button>
       </div>
+
+      {/* Smart Postcode Suggestion Banner */}
+      {detectedLocation && (
+        <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-brand/30 bg-emerald-50/80 p-3 sm:px-4 sm:py-3 shadow-sm text-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-sm">
+              <MapPin size={15} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-ink">
+                Postcode detected: <span className="text-brand font-bold">{detectedLocation.name}</span>
+              </p>
+              <p className="text-muted text-[11px]">
+                {detectedCandidate?.query
+                  ? `Center search here and find "${detectedCandidate.query}" within ${radius || 15} km`
+                  : `Show items within ${radius || 15} km of this postcode, sorted closest first`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              id="apply-detected-postcode-btn"
+              onClick={handleApplyDetectedPostcode}
+              className="btn-primary rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-sm"
+            >
+              <Sparkles size={13} /> Apply location
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDetectedLocation(null);
+                setDetectedCandidate(null);
+              }}
+              className="rounded-lg p-1.5 text-muted hover:text-ink hover:bg-black/5"
+              title="Dismiss"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Categories */}
       <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">

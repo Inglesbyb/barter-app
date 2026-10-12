@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { MapPin, Navigation, Compass, Check, ArrowDownUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MapPin, Navigation, Compass, Check, ArrowDownUp, Search, X, Sparkles } from 'lucide-react';
 import Modal from './Modal';
 import { Spinner } from './ui';
-import { POPULAR_LOCATIONS, RADIUS_PRESETS, getCurrentPosition } from '../lib/geo';
+import { POPULAR_LOCATIONS, RADIUS_PRESETS, getCurrentPosition, lookupLocationOrPostcode } from '../lib/geo';
 
 export default function DistanceFilterModal({
   open,
@@ -16,10 +16,49 @@ export default function DistanceFilterModal({
 }) {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState('');
+  const [postcodeInput, setPostcodeInput] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState(null);
+  const [lookupError, setLookupError] = useState('');
+
+  // Clear transient search state when modal reopens
+  useEffect(() => {
+    if (open) {
+      setGpsError('');
+      setLookupError('');
+      setLookupResult(null);
+    }
+  }, [open]);
+
+  const handleLookup = async (override) => {
+    const text = (override !== undefined ? override : postcodeInput).trim();
+    if (!text || text.length < 2) return;
+    setLookupLoading(true);
+    setLookupError('');
+    setLookupResult(null);
+    try {
+      const result = await lookupLocationOrPostcode(text);
+      if (result) {
+        setLookupResult(result);
+        onChangeLocation({
+          name: result.name,
+          lat: result.lat,
+          lng: result.lng,
+        });
+      } else {
+        setLookupError(`Could not find "${text}". Try a UK postcode (e.g. M1, SW1A 1AA, BS1) or city.`);
+      }
+    } catch {
+      setLookupError('Error looking up location. Please try again.');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   const handleUseGps = async () => {
     setGpsLoading(true);
     setGpsError('');
+    setLookupError('');
     try {
       const coords = await getCurrentPosition();
       // Find closest known city or use Current Location
@@ -49,7 +88,7 @@ export default function DistanceFilterModal({
       <div className="space-y-5">
         {/* Current Location Box */}
         <div>
-          <span className="label">Your location</span>
+          <span className="label">Active search center</span>
           <div className="flex items-center justify-between rounded-2xl border border-line bg-canvas p-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
@@ -60,7 +99,9 @@ export default function DistanceFilterModal({
                   {userLocation?.name || 'No location set'}
                 </p>
                 <p className="text-[11px] text-muted">
-                  {userLocation?.lat != null ? `${userLocation.lat.toFixed(2)}, ${userLocation.lng.toFixed(2)}` : 'Set location to filter by distance'}
+                  {userLocation?.lat != null
+                    ? `${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)}`
+                    : 'Set a location to filter and sort listings by distance'}
                 </p>
               </div>
             </div>
@@ -82,6 +123,64 @@ export default function DistanceFilterModal({
             </button>
           </div>
           {gpsError && <p className="mt-1.5 text-xs text-bad">{gpsError}</p>}
+        </div>
+
+        {/* Postcode & Town Search Input */}
+        <div>
+          <span className="label">Type a postcode or town</span>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleLookup();
+            }}
+            className="flex gap-2"
+          >
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+              <input
+                id="modal-postcode-input"
+                type="text"
+                value={postcodeInput}
+                onChange={(e) => {
+                  setPostcodeInput(e.target.value);
+                  setLookupError('');
+                }}
+                placeholder="e.g. M1, SW1A 1AA, BS1, Brighton…"
+                className="field rounded-xl py-2 pl-9 pr-8 text-xs font-medium"
+              />
+              {postcodeInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPostcodeInput('');
+                    setLookupResult(null);
+                    setLookupError('');
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink"
+                  aria-label="Clear postcode"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <button
+              type="submit"
+              id="modal-postcode-btn"
+              disabled={lookupLoading || !postcodeInput.trim()}
+              className="btn-primary rounded-xl px-3.5 py-2 text-xs font-semibold shrink-0"
+            >
+              {lookupLoading ? <Spinner className="h-3.5 w-3.5" /> : 'Find'}
+            </button>
+          </form>
+
+          {/* Inline Feedback */}
+          {lookupResult && (
+            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 border border-emerald-200">
+              <Sparkles size={13} className="text-emerald-600 shrink-0" />
+              <span className="truncate">Set location to <strong>{lookupResult.name}</strong></span>
+            </div>
+          )}
+          {lookupError && <p className="mt-1.5 text-xs text-bad">{lookupError}</p>}
         </div>
 
         {/* Quick Popular Cities */}
