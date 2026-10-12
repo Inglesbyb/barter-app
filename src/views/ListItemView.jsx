@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, ImagePlus, X } from 'lucide-react';
+import { Camera, ImagePlus, X, Sparkles, Check, Search } from 'lucide-react';
 import { supabase, unwrap, uploadItemImage } from '../lib/supabase';
-import { CATEGORIES, CONDITIONS, errorMessage, navigate, useApp } from '../lib/core';
+import { CONDITIONS, errorMessage, navigate, useApp } from '../lib/core';
+import { CATEGORY_DEFINITIONS, suggestCategory } from '../lib/categories';
 import { BackButton, PageTitle, Spinner } from '../components/ui';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -14,6 +15,9 @@ export default function ListItemView() {
   const [preview, setPreview] = useState(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
+  const [suggestedCategory, setSuggestedCategory] = useState(null);
+  const [hasManuallySelectedCategory, setHasManuallySelectedCategory] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
   const [condition, setCondition] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,6 +35,20 @@ export default function ListItemView() {
     setError('');
     setFile(f);
     setPreview(URL.createObjectURL(f));
+  };
+
+  const handleTitleChange = (val) => {
+    setTitle(val);
+    const suggestion = suggestCategory(val);
+    setSuggestedCategory(suggestion);
+    if (!hasManuallySelectedCategory && suggestion) {
+      setCategory(suggestion);
+    }
+  };
+
+  const handleSelectCategory = (catName) => {
+    setCategory(catName);
+    setHasManuallySelectedCategory(true);
   };
 
   const submit = async (e) => {
@@ -64,6 +82,16 @@ export default function ListItemView() {
       setBusy(false);
     }
   };
+
+  const filteredCategories = CATEGORY_DEFINITIONS.filter((c) => {
+    if (!catSearch.trim()) return true;
+    const term = catSearch.toLowerCase();
+    return (
+      c.label.toLowerCase().includes(term) ||
+      c.description.toLowerCase().includes(term) ||
+      c.keywords.some((kw) => kw.includes(term))
+    );
+  });
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -118,7 +146,7 @@ export default function ListItemView() {
             id="list-title"
             className="field"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="e.g. Nintendo Switch with 2 controllers"
             minLength={2}
             maxLength={80}
@@ -128,19 +156,78 @@ export default function ListItemView() {
 
         {/* Category */}
         <div>
-          <span className="label">Category</span>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="label mb-0">Category</span>
+            {suggestedCategory && category === suggestedCategory && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-0.5 text-[11px] font-semibold text-brand">
+                <Sparkles size={11} className="shrink-0" /> Suggested from title
+              </span>
+            )}
+          </div>
+
+          {/* Quick Filter */}
+          <div className="relative mb-2.5">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
+            <input
+              type="search"
+              value={catSearch}
+              onChange={(e) => setCatSearch(e.target.value)}
+              placeholder="Filter categories (e.g. gaming, tools, audio, bikes)..."
+              className="w-full rounded-xl border border-line bg-canvas py-2 pl-8 pr-8 text-xs text-ink placeholder:text-muted focus:border-brand focus:bg-white focus:outline-none"
+            />
+            {catSearch && (
               <button
-                key={c}
                 type="button"
-                id={`list-cat-${c.replace(/\W+/g, '-').toLowerCase()}`}
-                onClick={() => setCategory(c)}
-                className={category === c ? 'chip-on' : 'chip-off'}
+                onClick={() => setCatSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink"
               >
-                {c}
+                <X size={13} />
               </button>
-            ))}
+            )}
+          </div>
+
+          {/* Visual Cards Grid */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+            {filteredCategories.map((c) => {
+              const Icon = c.icon;
+              const active = category === c.label;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  id={`list-cat-${c.id.replace(/\W+/g, '-').toLowerCase()}`}
+                  onClick={() => handleSelectCategory(c.label)}
+                  className={`group relative flex items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
+                    active
+                      ? 'border-brand bg-brand-soft/80 shadow-sm ring-1 ring-brand'
+                      : 'border-line bg-white hover:border-brand/40 hover:bg-canvas/60'
+                  }`}
+                >
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+                      active ? 'bg-brand text-white shadow-sm' : 'bg-canvas text-ink-soft group-hover:bg-brand-soft group-hover:text-brand'
+                    }`}
+                  >
+                    <Icon size={18} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs font-bold truncate ${active ? 'text-brand' : 'text-ink'}`}>
+                        {c.label}
+                      </p>
+                      {active && (
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-white ml-1">
+                          <Check size={10} strokeWidth={3} />
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 line-clamp-1 text-[10px] text-muted leading-tight">
+                      {c.description}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 

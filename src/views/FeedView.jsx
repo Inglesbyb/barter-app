@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Search, PackageSearch, Plus, X, MapPin, SlidersHorizontal } from 'lucide-react';
+import { Search, PackageSearch, Plus, X, MapPin, SlidersHorizontal, LayoutGrid } from 'lucide-react';
 import { supabase, unwrap, ITEM_SELECT } from '../lib/supabase';
 import { CATEGORIES, navigate, useApp, useQuery } from '../lib/core';
+import { getCategoryIcon } from '../lib/categories';
 import { calculateDistance } from '../lib/geo';
 import ItemCard from '../components/ItemCard';
 import DistanceFilterModal from '../components/DistanceFilterModal';
@@ -188,17 +189,30 @@ export default function FeedView() {
 
       {/* Categories */}
       <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
-        {['All', ...CATEGORIES].map((c) => (
-          <button
-            key={c}
-            type="button"
-            id={`feed-cat-${c.replace(/\W+/g, '-').toLowerCase()}`}
-            onClick={() => setCategory(c)}
-            className={category === c ? 'chip-on' : 'chip-off'}
-          >
-            {c}
-          </button>
-        ))}
+        <button
+          type="button"
+          id="feed-cat-all"
+          onClick={() => setCategory('All')}
+          className={`flex items-center gap-1.5 whitespace-nowrap ${category === 'All' ? 'chip-on' : 'chip-off'}`}
+        >
+          <LayoutGrid size={14} className="shrink-0" />
+          <span>All</span>
+        </button>
+        {CATEGORIES.map((c) => {
+          const Icon = getCategoryIcon(c);
+          return (
+            <button
+              key={c}
+              type="button"
+              id={`feed-cat-${c.replace(/\W+/g, '-').toLowerCase()}`}
+              onClick={() => setCategory(c)}
+              className={`flex items-center gap-1.5 whitespace-nowrap ${category === c ? 'chip-on' : 'chip-off'}`}
+            >
+              <Icon size={14} className="shrink-0" />
+              <span>{c}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Filter status indicator */}

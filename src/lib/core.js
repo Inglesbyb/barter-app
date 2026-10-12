@@ -3,17 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState, useSyncExt
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-export const CATEGORIES = [
-  'Electronics',
-  'Clothing',
-  'Books',
-  'Home',
-  'Sports',
-  'Toys & Games',
-  'Music',
-  'Tools',
-  'Other',
-];
+export { CATEGORY_NAMES as CATEGORIES } from './categories';
 
 export const CONDITIONS = ['New', 'Like new', 'Good', 'Fair'];
 
